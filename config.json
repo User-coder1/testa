@@ -7,6 +7,10 @@
   "maxUnavailableRetries": 100,
   "cutoffDateIST": "2026-08-31",
   "allowedDaysIST": ["Saturday", "Sunday"],
+  "blackoutWindowIST": {
+    "startHour": 12,
+    "endHour": 15
+  },
   "headless": true,
   "seatPreference": {
     "deck": "upper",

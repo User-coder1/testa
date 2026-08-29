@@ -30,6 +30,15 @@ function getISTDayOfWeek() {
 }
 
 /**
+ * Helper to get current hour in IST (0-23)
+ */
+function getISTHour() {
+  const options = { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false };
+  const str = new Intl.DateTimeFormat('en-US', options).format(new Date());
+  return parseInt(str, 10);
+}
+
+/**
  * Executes a single run of Redbus seat booking automation targeting Easy Go bus and Upper Deck 2nd seat.
  * @param {Object} config Automation configuration object
  * @param {boolean} overrideHeadless Option to override headless setting
@@ -37,8 +46,10 @@ function getISTDayOfWeek() {
 async function runRedbusAutomation(config, overrideHeadless = undefined) {
   const currentISTDate = getISTDateString();
   const currentISTDay = getISTDayOfWeek();
-  const cutoffDate = config.cutoffDateIST || '2026-08-31';
+  const currentISTHour = getISTHour();
+  const cutoffDate = config.cutoffDateIST || '2026-09-01';
   const allowedDays = config.allowedDaysIST || ['Saturday', 'Sunday'];
+  const blackout = config.blackoutWindowIST || { startHour: 12, endHour: 15 };
 
   // Check 1: Day of Week Check (Saturday and Sunday only)
   if (!allowedDays.includes(currentISTDay)) {
@@ -55,11 +66,26 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     };
   }
 
-  // Check 2: Cutoff Date Check (Stop on/after Aug 31st IST)
+  // Check 2: Blackout Time Window Check (Skip 12:00 PM to 3:00 PM IST)
+  if (currentISTHour >= blackout.startHour && currentISTHour < blackout.endHour) {
+    console.log(`\n==================================================`);
+    console.log(`[SKIP TIME WINDOW] Current IST hour is ${currentISTHour}:00 (${currentISTHour % 12 || 12} ${currentISTHour >= 12 ? 'PM' : 'AM'}).`);
+    console.log(`Automation is paused between ${blackout.startHour}:00 PM and ${blackout.endHour % 12 || 12}:00 PM IST.`);
+    console.log(`==================================================\n`);
+    return {
+      success: false,
+      inBlackoutWindow: true,
+      seatAvailable: false,
+      retryNeeded: false,
+      error: `Current time (${currentISTHour}:00 IST) is inside 12 PM - 3 PM blackout window`
+    };
+  }
+
+  // Check 3: Cutoff Date Check (Runs through Aug 31st, stops on Sept 1st IST)
   if (currentISTDate >= cutoffDate) {
     console.log(`\n==================================================`);
     console.log(`[STOP CUTOFF REACHED] Today's date in IST is ${currentISTDate}, which matches/exceeds cutoff date ${cutoffDate}.`);
-    console.log(`Automation will not run on or after Aug 31st (IST). Exiting cleanly.`);
+    console.log(`Automation expired. Exiting cleanly.`);
     console.log(`==================================================\n`);
     return {
       success: false,

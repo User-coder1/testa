@@ -17,9 +17,12 @@ const args = process.argv.slice(2);
 const runOnce = args.includes('--once');
 const forceHeadful = args.includes('--headful');
 
-let intervalMinutes = config.intervalMinutes || 5;
-const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
+// Parse --max-duration flag (e.g., --max-duration 5)
+const maxDurIdx = args.indexOf('--max-duration');
+const maxDurationMinutes = maxDurIdx !== -1 && args[maxDurIdx + 1] ? parseFloat(args[maxDurIdx + 1]) : null;
 
+let intervalMinutes = config.intervalMinutes || 7;
+const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
 const overrideHeadless = forceHeadful ? false : undefined;
 
 console.log(`==================================================`);
@@ -31,8 +34,7 @@ console.log(` Target Seat    : Upper Deck 2nd Seat (Seat U2)`);
 console.log(` Boarding Point : ${config.boardingPointSearch || 'Clock Tower'}`);
 console.log(` Dropping Point : ${config.droppingPointSearch || 'Marathahalli'}`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
-console.log(` Main Run Interval: Every ${intervalMinutes} minute(s)`);
-console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : 'Continuous Schedule'}`);
+console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);
 console.log(`==================================================\n`);
 
 async function sleep(ms) {
@@ -42,8 +44,18 @@ async function sleep(ms) {
 async function executeWithSeatRetry() {
   let attempt = 1;
   const maxRetries = config.maxUnavailableRetries || 100;
+  const startTime = Date.now();
 
   while (attempt <= maxRetries) {
+    // Check max-duration timeout if specified
+    if (maxDurationMinutes) {
+      const elapsedMins = (Date.now() - startTime) / (1000 * 60);
+      if (elapsedMins >= maxDurationMinutes) {
+        console.log(`\n[MAX DURATION REACHED] Run time limit of ${maxDurationMinutes} minute(s) reached. Exiting current execution window.\n`);
+        return { success: false, timeoutReached: true };
+      }
+    }
+
     // Get progressive cyclical delay for this attempt
     const currentDelay = delayPattern[(attempt - 1) % delayPattern.length];
 
@@ -55,8 +67,8 @@ async function executeWithSeatRetry() {
       return res;
     }
 
-    if (res.cutoffReached || res.notAllowedDay) {
-      console.log(`[STOP] Execution halted (weekday skip or cutoff reached). Stopping retry loop.`);
+    if (res.cutoffReached || res.notAllowedDay || res.inBlackoutWindow) {
+      console.log(`[STOP] Execution halted (weekday skip, time window skip, or cutoff reached). Stopping retry loop.`);
       return res;
     }
 
@@ -76,6 +88,11 @@ async function executeWithSeatRetry() {
 if (runOnce) {
   executeWithSeatRetry().then(() => {
     console.log('Single run complete. Exiting.');
+    process.exit(0);
+  });
+} else if (maxDurationMinutes) {
+  executeWithSeatRetry().then(() => {
+    console.log(`Max duration execution complete. Exiting.`);
     process.exit(0);
   });
 } else {

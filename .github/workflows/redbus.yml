@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
   schedule:
-    # Runs every 7 minutes automatically (Node.js script handles Saturday/Sunday IST restriction)
-    - cron: '*/7 * * * *'
+    # Triggers every 5 minutes (Node.js script monitors continuously for 5 minutes per run)
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
@@ -29,8 +29,8 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Run Redbus Seat Automation
-        run: npm run once
+      - name: Run 5-Minute Active Seat Monitoring
+        run: npm run cloud-monitor
 
       - name: Upload Screenshots
         if: always()
