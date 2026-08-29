@@ -51,6 +51,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 1 [FORCED TEST]: Nalgonda to Bangalore',
       targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
       busOperator: 'Easy Go',
+      departureTime: '16:20',
       boardingPointSearch: 'Clock Tower',
       droppingPointSearch: 'Marathahalli'
     };
@@ -61,6 +62,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 2 [FORCED TEST]: Addanki to Bangalore',
       targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
       busOperator: 'Easy Go',
+      departureTime: '20:30',
       boardingPointSearch: 'Opp Rtc Bus Stand',
       droppingPointSearch: 'K R Puram'
     };
@@ -71,6 +73,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 3 [FORCED TEST]: Nellore to Bangalore',
       targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
       busOperator: 'Easy Go',
+      departureTime: '23:59',
       boardingPointSearch: 'Simhapuri',
       droppingPointSearch: 'Electronic city'
     };
@@ -90,6 +93,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 1: Nalgonda to Bangalore (Until Aug 30 4:00 PM IST)',
       targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
       busOperator: 'Easy Go',
+      departureTime: '16:20',
       boardingPointSearch: 'Clock Tower',
       droppingPointSearch: 'Marathahalli'
     };
@@ -99,6 +103,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 2: Addanki to Bangalore (Aug 30 4:00 PM - 8:20 PM IST)',
       targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
       busOperator: 'Easy Go',
+      departureTime: '20:30',
       boardingPointSearch: 'Opp Rtc Bus Stand',
       droppingPointSearch: 'K R Puram'
     };
@@ -108,6 +113,7 @@ function getActiveRoute(config, forcedPhase = null) {
       routeName: 'Phase 3: Nellore to Bangalore (After Aug 30 8:20 PM IST)',
       targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
       busOperator: 'Easy Go',
+      departureTime: '23:59',
       boardingPointSearch: 'Simhapuri',
       droppingPointSearch: 'Electronic city'
     };
@@ -171,6 +177,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
   console.log(`[${new Date().toLocaleString()}] Checking Route: ${activeRoute.routeName}`);
   console.log(`Headless Mode     : ${isHeadless}`);
   console.log(`Bus Operator      : ${targetOperator}`);
+  console.log(`Departure Time    : ${activeRoute.departureTime || '20:30'}`);
   console.log(`Seat Position     : Upper Deck Seat #${targetSeatIdx + 1} (Seat U2)`);
   console.log(`Pickup Location   : ${activeRoute.boardingPointSearch}`);
   console.log(`Drop Location     : ${activeRoute.droppingPointSearch}`);
@@ -183,22 +190,30 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
       '--disable-http2',
       '--disable-blink-features=AutomationControlled',
       '--no-sandbox',
-      '--disable-setuid-sandbox'
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--window-size=1440,900'
     ]
   });
 
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    locale: 'en-US',
+    timezoneId: 'Asia/Kolkata',
     extraHTTPHeaders: {
       'accept-language': 'en-US,en;q=0.9',
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'sec-ch-ua': '"Chromium";v="128", "Not=A?Brand";v="24", "Google Chrome";v="128"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"'
     }
   });
 
   const page = await context.newPage();
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
   });
 
   let runResult = {
@@ -224,9 +239,13 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     await page.waitForTimeout(2000);
 
     // 2. Open Seat View for Target Bus Operator (Easy Go)
-    console.log(`Locating bus card for operator matching "${targetOperator}"...`);
+    console.log(`Locating bus card for operator matching "${targetOperator}" (Departure: ${activeRoute.departureTime})...`);
     const busCard = await (async () => {
-      const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
+      const searchPattern = activeRoute.departureTime 
+        ? new RegExp(`Easy\\s*Go|${activeRoute.departureTime}`, 'i')
+        : new RegExp(targetOperator, 'i');
+
+      const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: searchPattern }).first();
 
       // Strategy 1: Progressive Page Scroll & Scan
       console.log(`Strategy 1: Progressive page scroll to scan for "${targetOperator}"...`);
