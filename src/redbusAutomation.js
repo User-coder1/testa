@@ -219,57 +219,80 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     await page.goto(activeRoute.targetUrl, { waitUntil: 'commit', timeout: 40000 });
     await page.waitForTimeout(5000);
 
-    // 2. Open Seat View for Target Bus Operator (Easy Go)
+    // 2. Open Seat View for Target Bus Operator (Easy Go) using multi-strategy locator
     console.log(`Locating bus card for operator matching "${targetOperator}"...`);
+    const busCard = await (async () => {
+      const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
 
-    // Check if AI Smart Filter search box is present
-    const smartFilterBox = page.locator('textarea[placeholder*="Morning bus" i], input[placeholder*="Morning bus" i], textarea[class*="textInput"]').first();
-    if (await smartFilterBox.isVisible().catch(() => false)) {
-      console.log(`Using AI Smart Filter search box to search for "${targetOperator}"...`);
-      await smartFilterBox.click();
-      await smartFilterBox.fill(targetOperator);
-      await page.waitForTimeout(800);
-      
-      const searchBtnCoords = await page.evaluate(() => {
-        const all = Array.from(document.querySelectorAll('*'));
-        const target = all.find(e => e.innerText && e.innerText.trim().toLowerCase() === 'search buses');
-        if (target) {
-          const rect = target.getBoundingClientRect();
-          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      // Strategy 1: Simple Scroll & Scan
+      console.log(`Strategy 1: Scrolling page to scan for "${targetOperator}"...`);
+      for (let i = 0; i < 6; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1200));
+        await page.waitForTimeout(400);
+        const card = getCardLocator();
+        if (await card.isVisible().catch(() => false)) {
+          console.log(`[FOUND] Bus card matched via Strategy 1 (Page Scroll).`);
+          return card;
         }
-        return null;
-      });
-
-      if (searchBtnCoords) {
-        await page.mouse.click(searchBtnCoords.x, searchBtnCoords.y);
-        await page.waitForTimeout(3000);
-      } else {
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(3000);
       }
-    }
 
-    // Scroll down to ensure bus cards lazy-load
-    for (let i = 0; i < 5; i++) {
-      await page.evaluate(() => window.scrollBy(0, 1000));
-      await page.waitForTimeout(400);
-    }
-
-    let busCard = page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
-
-    if (!(await busCard.isVisible().catch(() => false))) {
-      // Try Departure time sort tab if bus card still not visible
-      console.log(`Bus card not immediately visible. Trying "Departure time" sort tab...`);
+      // Strategy 2: Departure Time Sorting (Brings evening/night buses like 20:30 / 23:59 to top)
+      console.log(`Strategy 2: Clicking "Departure time" sort tab...`);
       const depSortBtn = page.locator('text=/Departure time/i').first();
       if (await depSortBtn.isVisible().catch(() => false)) {
-        await depSortBtn.click();
+        await depSortBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(3000);
-        for (let i = 0; i < 5; i++) {
-          await page.evaluate(() => window.scrollBy(0, 1000));
+        for (let i = 0; i < 6; i++) {
+          await page.evaluate(() => window.scrollBy(0, 1200));
           await page.waitForTimeout(400);
+          const card = getCardLocator();
+          if (await card.isVisible().catch(() => false)) {
+            console.log(`[FOUND] Bus card matched via Strategy 2 (Departure Time Sort).`);
+            return card;
+          }
         }
       }
-    }
+
+      // Strategy 3: AI Smart Filter Search Box
+      console.log(`Strategy 3: Using AI Smart Filter search box for "${targetOperator}"...`);
+      const smartFilterBox = page.locator('textarea[placeholder*="Morning bus" i], input[placeholder*="Morning bus" i], textarea[class*="textInput"]').first();
+      if (await smartFilterBox.isVisible().catch(() => false)) {
+        await smartFilterBox.click().catch(() => {});
+        await smartFilterBox.fill(targetOperator).catch(() => {});
+        await page.waitForTimeout(800);
+        await page.keyboard.press('Enter').catch(() => {});
+        
+        const searchBtn = page.locator('text=/Search buses/i').first();
+        if (await searchBtn.isVisible().catch(() => false)) {
+          await searchBtn.click({ force: true }).catch(() => {});
+        }
+        await page.waitForTimeout(3000);
+
+        for (let i = 0; i < 6; i++) {
+          await page.evaluate(() => window.scrollBy(0, 1200));
+          await page.waitForTimeout(400);
+          const card = getCardLocator();
+          if (await card.isVisible().catch(() => false)) {
+            console.log(`[FOUND] Bus card matched via Strategy 3 (AI Smart Filter).`);
+            return card;
+          }
+        }
+      }
+
+      // Strategy 4: Deep Page Scroll (All results)
+      console.log(`Strategy 4: Performing deep scroll across all loaded results...`);
+      for (let i = 0; i < 15; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1500));
+        await page.waitForTimeout(400);
+        const card = getCardLocator();
+        if (await card.isVisible().catch(() => false)) {
+          console.log(`[FOUND] Bus card matched via Strategy 4 (Deep Scroll).`);
+          return card;
+        }
+      }
+
+      return getCardLocator();
+    })();
 
     if (!(await busCard.isVisible().catch(() => false))) {
       throw new Error(`Bus card container for operator "${targetOperator}" was not found on search page`);
