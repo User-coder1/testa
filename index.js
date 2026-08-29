@@ -33,7 +33,7 @@ console.log(`==================================================`);
 console.log(` Easy Go Bus - Upper Deck 2nd Seat Automation`);
 console.log(`==================================================`);
 console.log(` Bus Operator   : ${config.busOperator || 'Easy Go'}`);
-console.log(` Target Seat    : Upper Deck 2nd Seat (Seat U2)`);
+console.log(` Target Seat    : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
 console.log(` Forced Phase   : ${forcedPhase ? `Phase ${forcedPhase}` : 'Auto (Time-based)'}`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
 console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);

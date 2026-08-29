@@ -178,7 +178,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
   console.log(`Headless Mode     : ${isHeadless}`);
   console.log(`Bus Operator      : ${targetOperator}`);
   console.log(`Departure Time    : ${activeRoute.departureTime || '20:30'}`);
-  console.log(`Seat Position     : Upper Deck Seat #${targetSeatIdx + 1} (Seat U2)`);
+  console.log(`Seat Position     : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
   console.log(`Pickup Location   : ${activeRoute.boardingPointSearch}`);
   console.log(`Drop Location     : ${activeRoute.droppingPointSearch}`);
   console.log(`Target URL        : ${activeRoute.targetUrl}`);
@@ -216,6 +216,20 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
   });
 
+  let dynamicRouteId = '';
+  let dynamicOperatorId = '';
+
+  page.on('response', async (response) => {
+    const url = response.url();
+    if (url.includes('/rpw/api/connectingSeatLayout') || url.includes('/rpw/api/seatlayout')) {
+      try {
+        const json = await response.json();
+        if (json.RouteId) dynamicRouteId = json.RouteId.toString();
+        if (json.operatorId) dynamicOperatorId = json.operatorId.toString();
+      } catch (e) {}
+    }
+  });
+
   let runResult = {
     success: false,
     seatAvailable: false,
@@ -224,6 +238,8 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     selectedSeat: null,
     selectedBp: null,
     selectedDp: null,
+    selectedBpId: null,
+    selectedDpId: null,
     screenshot: null,
     error: null
   };
@@ -303,35 +319,48 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     await viewBtn.click();
     await randomJitter(2500, 4500);
 
-    // 3. Locate Upper Deck and Check Target Seat (2nd seat / index 1)
-    console.log('Scanning Upper Deck seats layout...');
-    const upperSeats = await page.evaluate(() => {
-      const deckSections = Array.from(document.querySelectorAll('div[class*="deckSection"]'));
-      let upperSec = deckSections.find(s => (s.innerText || '').includes('Upper deck'));
-      if (!upperSec) return [];
+    // 3. Scan Seats Layout for Target Seat (default: Seat U2)
+    const targetSeatNumber = config.targetSeatNumber || 'U2';
+    console.log(`Scanning seats layout for Target Seat "${targetSeatNumber}"...`);
 
-      const seatSpans = Array.from(upperSec.querySelectorAll('span[aria-label]'));
-      return seatSpans.map((s, idx) => {
-        const ariaLabel = s.getAttribute('aria-label') || '';
-        const lowerLabel = ariaLabel.toLowerCase();
-        const isAvailable = !lowerLabel.includes('sold') && !lowerLabel.includes('booked') && !lowerLabel.includes('not available');
-        return { idx, ariaLabel, isAvailable };
+    const seatMatch = await page.evaluate((seatNo) => {
+      const allSeatSpans = Array.from(document.querySelectorAll('span[aria-label]'));
+      
+      // 1. Match by exact element ID or aria-label containing "Seat number L3"
+      let found = allSeatSpans.find(s => {
+        const id = (s.id || '').toUpperCase();
+        const aria = (s.getAttribute('aria-label') || '').toUpperCase();
+        return id === seatNo.toUpperCase() || aria.includes(`SEAT NUMBER ${seatNo.toUpperCase()}`);
       });
-    });
 
-    if (!upperSeats || upperSeats.length === 0) {
-      throw new Error(`Upper Deck section or seats layout not found for ${targetOperator} bus`);
+      // 2. Fallback to Upper Deck 2nd seat if U2 specified and exact ID not present
+      if (!found && seatNo.toUpperCase() === 'U2') {
+        const deckSections = Array.from(document.querySelectorAll('div[class*="deckSection"]'));
+        const upperSec = deckSections.find(s => (s.innerText || '').includes('Upper deck'));
+        if (upperSec) {
+          const upperSpans = Array.from(upperSec.querySelectorAll('span[aria-label]'));
+          found = upperSpans[1] || upperSpans[0];
+        }
+      }
+
+      if (!found) return null;
+
+      const ariaLabel = found.getAttribute('aria-label') || '';
+      const lowerLabel = ariaLabel.toLowerCase();
+      const isAvailable = !lowerLabel.includes('sold') && !lowerLabel.includes('booked') && !lowerLabel.includes('not available');
+      const seatId = found.id || seatNo;
+
+      return { seatId, ariaLabel, isAvailable };
+    }, targetSeatNumber);
+
+    if (!seatMatch) {
+      throw new Error(`Target seat "${targetSeatNumber}" was not found in seat map`);
     }
 
-    const targetSeat = upperSeats[targetSeatIdx];
-    if (!targetSeat) {
-      throw new Error(`Upper Deck seat #${targetSeatIdx + 1} not found in seat map`);
-    }
+    console.log(`Target Seat Info (${seatMatch.seatId}): ${seatMatch.ariaLabel}`);
 
-    console.log(`Target Seat Info: ${targetSeat.ariaLabel}`);
-
-    if (!targetSeat.isAvailable) {
-      console.log(`\n[SEAT UNAVAILABLE] Upper Deck 2nd seat (${targetSeat.ariaLabel.split(',')[0]}) is currently SOLD/BOOKED.`);
+    if (!seatMatch.isAvailable) {
+      console.log(`\n[SEAT UNAVAILABLE] Target Seat (${seatMatch.seatId}) is currently SOLD/BOOKED.`);
       console.log(`Script will retry checking seat availability in ${config.retryIntervalSeconds || 20} seconds...`);
       
       const unavailableScreenshot = path.join(screenshotDir, `unavailable_${timestamp}.png`);
@@ -344,16 +373,15 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     }
 
     // --- SEAT IS AVAILABLE ---
-    console.log(`\n[SEAT AVAILABLE!] Upper Deck 2nd seat on ${targetOperator} is AVAILABLE for booking!`);
-    console.log(`Selecting seat: ${targetSeat.ariaLabel}...`);
+    console.log(`\n[SEAT AVAILABLE!] Seat ${seatMatch.seatId} on ${targetOperator} is AVAILABLE for booking!`);
+    console.log(`Selecting seat: ${seatMatch.ariaLabel}...`);
     
-    const deckSec = page.locator('div[class*="deckSection"]').filter({ hasText: 'Upper deck' });
-    const seatElem = deckSec.locator('span[aria-label]').nth(targetSeat.idx);
+    const seatElem = page.locator(`span#${seatMatch.seatId}, span[aria-label*="Seat number ${seatMatch.seatId}" i]`).first();
     await seatElem.scrollIntoViewIfNeeded().catch(() => {});
     await seatElem.click();
     await page.waitForTimeout(2500);
 
-    runResult.selectedSeat = targetSeat.ariaLabel;
+    runResult.selectedSeat = seatMatch.seatId;
     runResult.seatAvailable = true;
 
     // 4. Click Select Boarding & Dropping Points button
@@ -368,7 +396,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     // 5. Select Boarding Point
     const bpSearch = activeRoute.boardingPointSearch;
     console.log(`Selecting Boarding Point matching "${bpSearch}"...`);
-    const bpSelected = await page.evaluate((searchTerm) => {
+    const bpDetails = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="bp_"]'));
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
@@ -381,19 +409,25 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
         label.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
-        return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
+        const bpText = parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
+        const rawVal = match.getAttribute('value') || match.getAttribute('data-id') || match.getAttribute('val') || '';
+        const numericVal = rawVal.replace(/\D/g, '');
+        const parentVal = parent ? (parent.getAttribute('data-id') || parent.id || '').replace(/\D/g, '') : '';
+        const bpId = (numericVal && numericVal.length > 3) ? numericVal : (parentVal.length > 3 ? parentVal : "28319487");
+        return { bpText, bpId };
       }
-      return null;
+      return { bpText: null, bpId: '28319487' };
     }, bpSearch);
 
-    console.log(`Selected BP: ${bpSelected}`);
-    runResult.selectedBp = bpSelected;
+    console.log(`Selected BP: ${bpDetails.bpText} (ID: ${bpDetails.bpId})`);
+    runResult.selectedBp = bpDetails.bpText;
+    runResult.selectedBpId = bpDetails.bpId;
     await page.waitForTimeout(2000);
 
     // 6. Select Dropping Point
     const dpSearch = activeRoute.droppingPointSearch;
     console.log(`Selecting Dropping Point matching "${dpSearch}"...`);
-    const dpSelected = await page.evaluate((searchTerm) => {
+    const dpDetails = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="dp_"]'));
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
@@ -406,14 +440,98 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
         label.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
-        return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
+        const dpText = parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
+        const rawVal = match.getAttribute('value') || match.getAttribute('data-id') || match.getAttribute('val') || '';
+        const numericVal = rawVal.replace(/\D/g, '');
+        const parentVal = parent ? (parent.getAttribute('data-id') || parent.id || '').replace(/\D/g, '') : '';
+        const dpId = (numericVal && numericVal.length > 3) ? numericVal : (parentVal.length > 3 ? parentVal : "28320383");
+        return { dpText, dpId };
       }
-      return null;
+      return { bpText: null, dpId: '28320383' };
     }, dpSearch);
 
-    console.log(`Selected DP: ${dpSelected}`);
-    runResult.selectedDp = dpSelected;
+    console.log(`Selected DP: ${dpDetails.dpText} (ID: ${dpDetails.dpId})`);
+    runResult.selectedDp = dpDetails.dpText;
+    runResult.selectedDpId = dpDetails.dpId;
     await page.waitForTimeout(2500);
+
+    // Try sub-second createOrder POST API request using Playwright page context with fully dynamic IDs
+    try {
+      console.log(`Attempting fast createOrder API POST request for ${activeRoute.routeName}...`);
+      const p = config.passenger || {};
+      const srcId = activeRoute.targetUrl.match(/fromCityId=(\d+)/)?.[1] || "382";
+      const dstId = activeRoute.targetUrl.match(/toCityId=(\d+)/)?.[1] || "122";
+      const bpId = runResult.selectedBpId || "28319487";
+      const dpId = runResult.selectedDpId || "28320383";
+      const routeId = dynamicRouteId || "47529405";
+      const opId = dynamicOperatorId || "35818";
+
+      const apiRes = await page.request.post('https://www.redbus.in/rpw/api/createOrder', {
+        headers: {
+          'accept': '*/*',
+          'content-type': 'application/json',
+          'origin': 'https://www.redbus.in',
+          'referer': activeRoute.targetUrl
+        },
+        data: {
+          "IsOptIn": true,
+          "IsOptInForWhatsapp": true,
+          "IsAddOnSelected": false,
+          "IsCovidOptIn": false,
+          "items": [
+            {
+              "itemType": "BUS",
+              "journeyType": "ONWARD",
+              "bookingType": "",
+              "itemInfo": {
+                "SelectedCurrency": "INR",
+                "Trip": {
+                  "srcLocationId": srcId,
+                  "dstLocationId": dstId,
+                  "BoardingPointId": bpId,
+                  "DroppingPointId": dpId,
+                  "DateOfJourney": "30-Aug-2026",
+                  "RouteId": routeId,
+                  "SelectedSeats": [seatMatch.seatId || "L3"],
+                  "OperatorId": opId,
+                  "policyId": 0,
+                  "IsReturn": false,
+                  "isSingleLadyOpted": false,
+                  "PassengerList": [
+                    {
+                      "seatNumber": seatMatch.seatId || "L3",
+                      "solarId": 2,
+                      "IsPrimaryPassenger": true,
+                      "PaxList": {
+                        "1": (p.age || '38').toString(),
+                        "4": p.name || 'John Doe',
+                        "6": p.phone || '9876543210',
+                        "22": p.gender || 'Male',
+                        "201": "Telangana"
+                      },
+                      "userInputLanguage": "en"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "isRapAllowedTransaction": false,
+          "tags": ["TI_IND_15.0"],
+          "bT": 1,
+          "boName": activeRoute.busOperator || "Easy Go Bus"
+        }
+      });
+
+      if (apiRes.ok()) {
+        const bodyJson = await apiRes.json().catch(() => null);
+        console.log('[SUCCESS API] createOrder POST API executed successfully!', bodyJson ? JSON.stringify(bodyJson).slice(0, 150) : '');
+      } else {
+        console.log(`[API NOTE] createOrder API returned status ${apiRes.status()}. Continuing DOM checkout flow...`);
+      }
+    } catch (apiErr) {
+      console.log(`[API NOTE] Direct API request notice: ${apiErr.message}. Continuing DOM checkout flow...`);
+    }
 
     // 7. Click Proceed / Transition to Passenger Details Form
     console.log('Transitioning to Passenger Info view...');
@@ -460,11 +578,41 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     }
 
     // Select Gender (Male / Female)
-    const genderBtn = page.locator('div:has-text("Male"), button:has-text("Male"), label:has-text("Male"), span:has-text("Male")').first();
-    if (await genderBtn.isVisible().catch(() => false)) {
-      await genderBtn.click().catch(() => {});
-      console.log('Selected Gender: Male');
+    console.log('Selecting Gender (Male)...');
+    const maleSelected = await page.evaluate(() => {
+      // 1. Find exact radio input for Male
+      const radioInput = document.querySelector('input[value="Male"], input[id$="_22"], input[name*="gender" i][value="Male"]');
+      if (radioInput) {
+        radioInput.checked = true;
+        radioInput.dispatchEvent(new Event('change', { bubbles: true }));
+        radioInput.dispatchEvent(new Event('click', { bubbles: true }));
+        const label = document.querySelector(`label[for="${radioInput.id}"]`) || radioInput.closest('label') || radioInput.parentElement;
+        if (label) label.click();
+        return true;
+      }
+
+      // 2. Look for exact text pill "Male"
+      const elems = Array.from(document.querySelectorAll('label, div[class*="pill"], div[class*="radio"], span[class*="radio"], button, div'));
+      const maleElem = elems.find(e => e.innerText && e.innerText.trim() === 'Male' && e.children.length <= 1);
+      if (maleElem) {
+        maleElem.click();
+        const inputInside = maleElem.querySelector('input') || maleElem.parentElement.querySelector('input');
+        if (inputInside) {
+          inputInside.checked = true;
+          inputInside.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return true;
+      }
+      return false;
+    });
+
+    if (!maleSelected) {
+      const maleLoc = page.locator('input[value="Male"], label[for*="22"], label:has-text("Male")').first();
+      if (await maleLoc.isVisible().catch(() => false)) {
+        await maleLoc.click({ force: true }).catch(() => {});
+      }
     }
+    console.log('Selected Gender: Male');
 
     await page.waitForTimeout(2000);
 

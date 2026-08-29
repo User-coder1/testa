@@ -8,6 +8,7 @@
   "cutoffDateIST": "2026-09-01",
   "allowedDaysIST": ["Saturday", "Sunday", "Monday"],
   "headless": true,
+  "targetSeatNumber": "U2",
   "seatPreference": {
     "deck": "upper",
     "seatIndex": 1
