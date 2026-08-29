@@ -216,22 +216,26 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
   try {
     // 1. Navigate to target URL
     console.log(`Navigating to route: ${activeRoute.targetUrl}`);
-    await page.goto(activeRoute.targetUrl, { waitUntil: 'commit', timeout: 40000 });
-    await page.waitForTimeout(5000);
+    await page.goto(activeRoute.targetUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
 
-    // 2. Open Seat View for Target Bus Operator (Easy Go) using multi-strategy locator
+    // Wait for search result cards list to be present in DOM
+    console.log('Waiting for search results page to load...');
+    await page.waitForSelector('li[class*="srpListItem"], div[class*="tuple"]', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+
+    // 2. Open Seat View for Target Bus Operator (Easy Go)
     console.log(`Locating bus card for operator matching "${targetOperator}"...`);
     const busCard = await (async () => {
       const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
 
-      // Strategy 1: Simple Scroll & Scan
-      console.log(`Strategy 1: Scrolling page to scan for "${targetOperator}"...`);
-      for (let i = 0; i < 6; i++) {
-        await page.evaluate(() => window.scrollBy(0, 1200));
+      // Strategy 1: Progressive Page Scroll & Scan
+      console.log(`Strategy 1: Progressive page scroll to scan for "${targetOperator}"...`);
+      for (let i = 0; i < 8; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1000));
         await page.waitForTimeout(400);
         const card = getCardLocator();
         if (await card.isVisible().catch(() => false)) {
-          console.log(`[FOUND] Bus card matched via Strategy 1 (Page Scroll).`);
+          console.log(`[FOUND] Bus card matched via Strategy 1 (Progressive Scroll).`);
           return card;
         }
       }
@@ -241,9 +245,9 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
       const depSortBtn = page.locator('text=/Departure time/i').first();
       if (await depSortBtn.isVisible().catch(() => false)) {
         await depSortBtn.click({ force: true }).catch(() => {});
-        await page.waitForTimeout(3000);
-        for (let i = 0; i < 6; i++) {
-          await page.evaluate(() => window.scrollBy(0, 1200));
+        await page.waitForTimeout(2500);
+        for (let i = 0; i < 8; i++) {
+          await page.evaluate(() => window.scrollBy(0, 1000));
           await page.waitForTimeout(400);
           const card = getCardLocator();
           if (await card.isVisible().catch(() => false)) {
@@ -253,40 +257,14 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         }
       }
 
-      // Strategy 3: AI Smart Filter Search Box
-      console.log(`Strategy 3: Using AI Smart Filter search box for "${targetOperator}"...`);
-      const smartFilterBox = page.locator('textarea[placeholder*="Morning bus" i], input[placeholder*="Morning bus" i], textarea[class*="textInput"]').first();
-      if (await smartFilterBox.isVisible().catch(() => false)) {
-        await smartFilterBox.click().catch(() => {});
-        await smartFilterBox.fill(targetOperator).catch(() => {});
-        await page.waitForTimeout(800);
-        await page.keyboard.press('Enter').catch(() => {});
-        
-        const searchBtn = page.locator('text=/Search buses/i').first();
-        if (await searchBtn.isVisible().catch(() => false)) {
-          await searchBtn.click({ force: true }).catch(() => {});
-        }
-        await page.waitForTimeout(3000);
-
-        for (let i = 0; i < 6; i++) {
-          await page.evaluate(() => window.scrollBy(0, 1200));
-          await page.waitForTimeout(400);
-          const card = getCardLocator();
-          if (await card.isVisible().catch(() => false)) {
-            console.log(`[FOUND] Bus card matched via Strategy 3 (AI Smart Filter).`);
-            return card;
-          }
-        }
-      }
-
-      // Strategy 4: Deep Page Scroll (All results)
-      console.log(`Strategy 4: Performing deep scroll across all loaded results...`);
+      // Strategy 3: Deep Page Scroll
+      console.log(`Strategy 3: Performing deep scroll across all loaded results...`);
       for (let i = 0; i < 15; i++) {
         await page.evaluate(() => window.scrollBy(0, 1500));
         await page.waitForTimeout(400);
         const card = getCardLocator();
         if (await card.isVisible().catch(() => false)) {
-          console.log(`[FOUND] Bus card matched via Strategy 4 (Deep Scroll).`);
+          console.log(`[FOUND] Bus card matched via Strategy 3 (Deep Scroll).`);
           return card;
         }
       }
