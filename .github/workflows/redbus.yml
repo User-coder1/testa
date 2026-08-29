@@ -1,0 +1,38 @@
+name: Redbus Automated Seat Checker
+
+on:
+  schedule:
+    # Runs every 7 minutes automatically ONLY on Saturday (6) and Sunday (0)
+    - cron: '*/7 * * * 6,0'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  check-and-book:
+    runs-on: ubuntu-latest
+    env:
+      TZ: 'Asia/Kolkata'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Redbus Seat Automation
+        run: npm run once
+
+      - name: Upload Screenshots
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: redbus-screenshots
+          path: screenshots/

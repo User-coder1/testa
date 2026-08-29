@@ -1,0 +1,24 @@
+{
+  "targetUrl": "https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate",
+  "busOperator": "Easy Go",
+  "intervalMinutes": 7,
+  "retryDelayPatternSeconds": [20, 40, 60],
+  "keepBrowserOpenSeconds": 15,
+  "maxUnavailableRetries": 100,
+  "cutoffDateIST": "2026-08-31",
+  "allowedDaysIST": ["Saturday", "Sunday"],
+  "headless": true,
+  "seatPreference": {
+    "deck": "upper",
+    "seatIndex": 1
+  },
+  "boardingPointSearch": "Clock Tower",
+  "droppingPointSearch": "Marathahalli",
+  "passenger": {
+    "name": "John Doe",
+    "age": "38",
+    "gender": "Male",
+    "email": "johndoe@example.com",
+    "phone": "9876543210"
+  }
+}
