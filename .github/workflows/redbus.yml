@@ -6,7 +6,26 @@ on:
   schedule:
     # Triggers every 5 minutes (Node.js script monitors continuously for 5 minutes per run)
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Select Route Phase (or auto for time-based schedule)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - '1'
+          - '2'
+          - '3'
+      mode:
+        description: 'Execution Mode'
+        required: false
+        default: 'cloud-monitor'
+        type: choice
+        options:
+          - 'cloud-monitor'
+          - 'once'
 
 jobs:
   check-and-book:
@@ -29,8 +48,30 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Run 5-Minute Active Seat Monitoring
-        run: npm run cloud-monitor
+      - name: Run Redbus Seat Monitoring
+        run: |
+          PHASE_INPUT="${{ github.event.inputs.phase || 'auto' }}"
+          MODE_INPUT="${{ github.event.inputs.mode || 'cloud-monitor' }}"
+          
+          CMD="node index.js"
+          
+          if [ "$MODE_INPUT" = "once" ]; then
+            CMD="$CMD --once"
+          else
+            CMD="$CMD --max-duration 5"
+          fi
+          
+          if [ "$PHASE_INPUT" != "auto" ] && [ -n "$PHASE_INPUT" ]; then
+            CMD="$CMD --phase $PHASE_INPUT"
+          fi
+          
+          echo "=================================================="
+          echo "Executing Cloud Automation: $CMD"
+          echo "Selected Phase: $PHASE_INPUT"
+          echo "Selected Mode : $MODE_INPUT"
+          echo "=================================================="
+          
+          $CMD
 
       - name: Upload Screenshots
         if: always()

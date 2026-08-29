@@ -5,12 +5,8 @@
   "retryDelayPatternSeconds": [20, 40, 60],
   "keepBrowserOpenSeconds": 15,
   "maxUnavailableRetries": 100,
-  "cutoffDateIST": "2026-08-31",
-  "allowedDaysIST": ["Saturday", "Sunday"],
-  "blackoutWindowIST": {
-    "startHour": 12,
-    "endHour": 15
-  },
+  "cutoffDateIST": "2026-09-01",
+  "allowedDaysIST": ["Saturday", "Sunday", "Monday"],
   "headless": true,
   "seatPreference": {
     "deck": "upper",

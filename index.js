@@ -21,6 +21,10 @@ const forceHeadful = args.includes('--headful');
 const maxDurIdx = args.indexOf('--max-duration');
 const maxDurationMinutes = maxDurIdx !== -1 && args[maxDurIdx + 1] ? parseFloat(args[maxDurIdx + 1]) : null;
 
+// Parse --phase flag (e.g., --phase 1, --phase 2, --phase 3)
+const phaseIdx = args.indexOf('--phase');
+const forcedPhase = phaseIdx !== -1 && args[phaseIdx + 1] ? parseInt(args[phaseIdx + 1], 10) : null;
+
 let intervalMinutes = config.intervalMinutes || 7;
 const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
 const overrideHeadless = forceHeadful ? false : undefined;
@@ -28,11 +32,9 @@ const overrideHeadless = forceHeadful ? false : undefined;
 console.log(`==================================================`);
 console.log(` Easy Go Bus - Upper Deck 2nd Seat Automation`);
 console.log(`==================================================`);
-console.log(` Target Route   : Nalgonda to Bangalore`);
 console.log(` Bus Operator   : ${config.busOperator || 'Easy Go'}`);
 console.log(` Target Seat    : Upper Deck 2nd Seat (Seat U2)`);
-console.log(` Boarding Point : ${config.boardingPointSearch || 'Clock Tower'}`);
-console.log(` Dropping Point : ${config.droppingPointSearch || 'Marathahalli'}`);
+console.log(` Forced Phase   : ${forcedPhase ? `Phase ${forcedPhase}` : 'Auto (Time-based)'}`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
 console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);
 console.log(`==================================================\n`);
@@ -60,7 +62,7 @@ async function executeWithSeatRetry() {
     const currentDelay = delayPattern[(attempt - 1) % delayPattern.length];
 
     console.log(`--- [Attempt #${attempt}] Checking Upper Deck 2nd seat availability ---`);
-    const res = await runRedbusAutomation(config, overrideHeadless);
+    const res = await runRedbusAutomation(config, overrideHeadless, forcedPhase);
 
     if (res.success) {
       console.log(`[SUCCESS] Seat booked and reached Checkout page!`);

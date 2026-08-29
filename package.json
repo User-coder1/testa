@@ -9,6 +9,9 @@
     "logs": "npx pm2 logs redbus-automation",
     "stop": "npx pm2 stop redbus-automation",
     "once": "node index.js --once",
+    "phase1": "node index.js --once --phase 1",
+    "phase2": "node index.js --once --phase 2",
+    "phase3": "node index.js --once --phase 3",
     "cloud-monitor": "node index.js --max-duration 5",
     "headful": "node index.js --headful",
     "test": "node index.js --once"

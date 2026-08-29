@@ -39,23 +39,99 @@ function getISTHour() {
 }
 
 /**
+ * Helper to get active route config based on current IST timestamp or forced phase CLI flag
+ * Phase 1 (Until Aug 30 4:00 PM IST): Nalgonda to Bangalore (Clock Tower -> Marathahalli)
+ * Phase 2 (Aug 30 4:00 PM IST - 8:20 PM IST): Addanki to Nellore (Opp Rtc Bus Stand -> Simhapuri)
+ * Phase 3 (After Aug 30 8:20 PM IST): Nellore to Bangalore (Simhapuri -> Electronic city)
+ */
+function getActiveRoute(config, forcedPhase = null) {
+  if (forcedPhase === 1) {
+    return {
+      phase: 1,
+      routeName: 'Phase 1 [FORCED TEST]: Nalgonda to Bangalore',
+      targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Clock Tower',
+      droppingPointSearch: 'Marathahalli'
+    };
+  }
+  if (forcedPhase === 2) {
+    return {
+      phase: 2,
+      routeName: 'Phase 2 [FORCED TEST]: Addanki to Bangalore',
+      targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Opp Rtc Bus Stand',
+      droppingPointSearch: 'K R Puram'
+    };
+  }
+  if (forcedPhase === 3) {
+    return {
+      phase: 3,
+      routeName: 'Phase 3 [FORCED TEST]: Nellore to Bangalore',
+      targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Simhapuri',
+      droppingPointSearch: 'Electronic city'
+    };
+  }
+
+  const now = new Date();
+  
+  // Threshold 1: Aug 30, 2026 at 4:00 PM IST (16:00:00+05:30)
+  const t1_4pm = new Date('2026-08-30T16:00:00+05:30');
+
+  // Threshold 2: Aug 30, 2026 at 8:20 PM IST (20:20:00+05:30)
+  const t2_820pm = new Date('2026-08-30T20:20:00+05:30');
+
+  if (now < t1_4pm) {
+    return {
+      phase: 1,
+      routeName: 'Phase 1: Nalgonda to Bangalore (Until Aug 30 4:00 PM IST)',
+      targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Clock Tower',
+      droppingPointSearch: 'Marathahalli'
+    };
+  } else if (now >= t1_4pm && now < t2_820pm) {
+    return {
+      phase: 2,
+      routeName: 'Phase 2: Addanki to Bangalore (Aug 30 4:00 PM - 8:20 PM IST)',
+      targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Opp Rtc Bus Stand',
+      droppingPointSearch: 'K R Puram'
+    };
+  } else {
+    return {
+      phase: 3,
+      routeName: 'Phase 3: Nellore to Bangalore (After Aug 30 8:20 PM IST)',
+      targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
+      busOperator: 'Easy Go',
+      boardingPointSearch: 'Simhapuri',
+      droppingPointSearch: 'Electronic city'
+    };
+  }
+}
+
+/**
  * Executes a single run of Redbus seat booking automation targeting Easy Go bus and Upper Deck 2nd seat.
  * @param {Object} config Automation configuration object
  * @param {boolean} overrideHeadless Option to override headless setting
+ * @param {number} forcedPhase Optional phase override (1, 2, or 3)
  */
-async function runRedbusAutomation(config, overrideHeadless = undefined) {
+async function runRedbusAutomation(config, overrideHeadless = undefined, forcedPhase = null) {
+  const activeRoute = getActiveRoute(config, forcedPhase);
   const currentISTDate = getISTDateString();
   const currentISTDay = getISTDayOfWeek();
-  const currentISTHour = getISTHour();
   const cutoffDate = config.cutoffDateIST || '2026-09-01';
-  const allowedDays = config.allowedDaysIST || ['Saturday', 'Sunday'];
-  const blackout = config.blackoutWindowIST || { startHour: 12, endHour: 15 };
+  const allowedDays = config.allowedDaysIST || ['Saturday', 'Sunday', 'Monday'];
 
-  // Check 1: Day of Week Check (Saturday and Sunday only)
+  // Check 1: Day of Week Check (Saturday, Sunday, and Monday)
   if (!allowedDays.includes(currentISTDay)) {
     console.log(`\n==================================================`);
     console.log(`[SKIP WEEKDAY] Today in IST is ${currentISTDay}.`);
-    console.log(`Automation is configured to run ONLY on ${allowedDays.join(' and ')}.`);
+    console.log(`Automation is configured to run ONLY on ${allowedDays.join(', ')}.`);
     console.log(`==================================================\n`);
     return {
       success: false,
@@ -66,22 +142,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     };
   }
 
-  // Check 2: Blackout Time Window Check (Skip 12:00 PM to 3:00 PM IST)
-  if (currentISTHour >= blackout.startHour && currentISTHour < blackout.endHour) {
-    console.log(`\n==================================================`);
-    console.log(`[SKIP TIME WINDOW] Current IST hour is ${currentISTHour}:00 (${currentISTHour % 12 || 12} ${currentISTHour >= 12 ? 'PM' : 'AM'}).`);
-    console.log(`Automation is paused between ${blackout.startHour}:00 PM and ${blackout.endHour % 12 || 12}:00 PM IST.`);
-    console.log(`==================================================\n`);
-    return {
-      success: false,
-      inBlackoutWindow: true,
-      seatAvailable: false,
-      retryNeeded: false,
-      error: `Current time (${currentISTHour}:00 IST) is inside 12 PM - 3 PM blackout window`
-    };
-  }
-
-  // Check 3: Cutoff Date Check (Runs through Aug 31st, stops on Sept 1st IST)
+  // Check 2: Cutoff Date Check (Runs through Aug 31st, stops on Sept 1st IST)
   if (currentISTDate >= cutoffDate) {
     console.log(`\n==================================================`);
     console.log(`[STOP CUTOFF REACHED] Today's date in IST is ${currentISTDate}, which matches/exceeds cutoff date ${cutoffDate}.`);
@@ -103,14 +164,18 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const targetOperator = config.busOperator || 'Easy Go';
+  const targetOperator = activeRoute.busOperator;
   const targetSeatIdx = config.seatPreference?.seatIndex !== undefined ? config.seatPreference.seatIndex : 1; // 2nd seat (index 1)
 
   console.log(`\n==================================================`);
-  console.log(`[${new Date().toLocaleString()}] Checking ${targetOperator} Bus - Upper Deck 2nd Seat...`);
-  console.log(`Headless Mode       : ${isHeadless}`);
-  console.log(`Target Bus Operator : ${targetOperator}`);
-  console.log(`Target Seat Position: Upper Deck Seat #${targetSeatIdx + 1}`);
+  console.log(`[${new Date().toLocaleString()}] Checking Route: ${activeRoute.routeName}`);
+  console.log(`Headless Mode     : ${isHeadless}`);
+  console.log(`Bus Operator      : ${targetOperator}`);
+  console.log(`Seat Position     : Upper Deck Seat #${targetSeatIdx + 1} (Seat U2)`);
+  console.log(`Pickup Location   : ${activeRoute.boardingPointSearch}`);
+  console.log(`Drop Location     : ${activeRoute.droppingPointSearch}`);
+  console.log(`Target URL        : ${activeRoute.targetUrl}`);
+  console.log(`==================================================`);
 
   const browser = await chromium.launch({
     headless: isHeadless,
@@ -150,13 +215,61 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
 
   try {
     // 1. Navigate to target URL
-    console.log(`Navigating to route: ${config.targetUrl}`);
-    await page.goto(config.targetUrl, { waitUntil: 'commit', timeout: 40000 });
+    console.log(`Navigating to route: ${activeRoute.targetUrl}`);
+    await page.goto(activeRoute.targetUrl, { waitUntil: 'commit', timeout: 40000 });
     await page.waitForTimeout(5000);
 
-    // 2. Open Seat View for Target Bus Operator (Easy Go) using strict card container scoping
+    // 2. Open Seat View for Target Bus Operator (Easy Go)
     console.log(`Locating bus card for operator matching "${targetOperator}"...`);
-    const busCard = page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
+
+    // Check if AI Smart Filter search box is present
+    const smartFilterBox = page.locator('textarea[placeholder*="Morning bus" i], input[placeholder*="Morning bus" i], textarea[class*="textInput"]').first();
+    if (await smartFilterBox.isVisible().catch(() => false)) {
+      console.log(`Using AI Smart Filter search box to search for "${targetOperator}"...`);
+      await smartFilterBox.click();
+      await smartFilterBox.fill(targetOperator);
+      await page.waitForTimeout(800);
+      
+      const searchBtnCoords = await page.evaluate(() => {
+        const all = Array.from(document.querySelectorAll('*'));
+        const target = all.find(e => e.innerText && e.innerText.trim().toLowerCase() === 'search buses');
+        if (target) {
+          const rect = target.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+        return null;
+      });
+
+      if (searchBtnCoords) {
+        await page.mouse.click(searchBtnCoords.x, searchBtnCoords.y);
+        await page.waitForTimeout(3000);
+      } else {
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(3000);
+      }
+    }
+
+    // Scroll down to ensure bus cards lazy-load
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.scrollBy(0, 1000));
+      await page.waitForTimeout(400);
+    }
+
+    let busCard = page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"]').filter({ hasText: new RegExp(targetOperator, 'i') }).first();
+
+    if (!(await busCard.isVisible().catch(() => false))) {
+      // Try Departure time sort tab if bus card still not visible
+      console.log(`Bus card not immediately visible. Trying "Departure time" sort tab...`);
+      const depSortBtn = page.locator('text=/Departure time/i').first();
+      if (await depSortBtn.isVisible().catch(() => false)) {
+        await depSortBtn.click();
+        await page.waitForTimeout(3000);
+        for (let i = 0; i < 5; i++) {
+          await page.evaluate(() => window.scrollBy(0, 1000));
+          await page.waitForTimeout(400);
+        }
+      }
+    }
 
     if (!(await busCard.isVisible().catch(() => false))) {
       throw new Error(`Bus card container for operator "${targetOperator}" was not found on search page`);
@@ -232,15 +345,16 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     }
     await page.waitForTimeout(3000);
 
-    // 5. Select Boarding Point (Clock Tower)
-    const bpSearch = config.boardingPointSearch || 'Clock Tower';
+    // 5. Select Boarding Point
+    const bpSearch = activeRoute.boardingPointSearch;
     console.log(`Selecting Boarding Point matching "${bpSearch}"...`);
     const bpSelected = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="bp_"]'));
+      const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
         const parent = i.closest('li') || i.closest('label') || i.parentElement;
-        const text = parent ? parent.innerText.toLowerCase() : '';
-        return text.includes('clock') || text.includes(searchTerm.toLowerCase().replace(/\s+/g, ''));
+        const text = parent ? parent.innerText.toLowerCase().replace(/\s+/g, '') : '';
+        return text.includes(cleanSearch);
       }) || inputs[0];
 
       if (match) {
@@ -256,15 +370,16 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     runResult.selectedBp = bpSelected;
     await page.waitForTimeout(2000);
 
-    // 6. Select Dropping Point (Marathahalli)
-    const dpSearch = config.droppingPointSearch || 'Marathahalli';
+    // 6. Select Dropping Point
+    const dpSearch = activeRoute.droppingPointSearch;
     console.log(`Selecting Dropping Point matching "${dpSearch}"...`);
     const dpSelected = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="dp_"]'));
+      const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
         const parent = i.closest('li') || i.closest('label') || i.parentElement;
-        const text = parent ? parent.innerText.toLowerCase() : '';
-        return text.includes('marathahalli') || text.includes('marathali') || text.includes('marath');
+        const text = parent ? parent.innerText.toLowerCase().replace(/\s+/g, '') : '';
+        return text.includes(cleanSearch);
       }) || inputs[0];
 
       if (match) {
