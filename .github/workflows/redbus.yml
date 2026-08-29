@@ -1,6 +1,8 @@
 name: Redbus Automated Seat Checker
 
 on:
+  push:
+    branches: [ main ]
   schedule:
     # Runs every 7 minutes automatically ONLY on Saturday (6) and Sunday (0)
     - cron: '*/7 * * * 6,0'
