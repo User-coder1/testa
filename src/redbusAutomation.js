@@ -9,17 +9,78 @@ const randomJitter = (minMs = 1200, maxMs = 3500) => {
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-async function runRedbusAutomation(config, overrideHeadless = undefined) {
-  const cutoffDateIST = config.cutoffDateIST || '2026-08-31T01:00:00';
+/**
+ * Helper to get active route config based on current IST timestamp or forced phase CLI flag
+ * Phase 1 (Until Aug 30 3:30 PM IST): Nalgonda/Anantapur to Bangalore (Clock Tower -> Marathahalli)
+ * Phase 2 (Aug 30 3:30 PM IST - 8:20 PM IST): Addanki to Bangalore (Opp Rtc Bus Stand -> K R Puram)
+ * Phase 3 (After Aug 30 8:20 PM IST): Nellore to Bangalore (Simhapuri -> Electronic city)
+ */
+function getActiveRoute(config, forcedPhase = null) {
+  const routes = {
+    1: {
+      phase: 1,
+      routeName: 'Phase 1: Nalgonda/Anantapur to Bangalore',
+      targetUrl: config.targetUrl || 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026',
+      busOperator: config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
+      departureTime: config.phase1Departure || config.departureTime || '23:55',
+      boardingPointSearch: config.boardingPointSearch || 'Clock Tower',
+      droppingPointSearch: config.droppingPointSearch || 'Marathahalli'
+    },
+    2: {
+      phase: 2,
+      routeName: 'Phase 2: Addanki to Bangalore',
+      targetUrl: config.phase2Url || 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
+      busOperator: config.phase2Operator || config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
+      departureTime: config.phase2Departure || config.departureTime || '23:55',
+      boardingPointSearch: config.phase2Boarding || 'Opp Rtc Bus Stand',
+      droppingPointSearch: config.phase2Dropping || 'K R Puram'
+    },
+    3: {
+      phase: 3,
+      routeName: 'Phase 3: Nellore to Bangalore',
+      targetUrl: config.phase3Url || 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
+      busOperator: config.phase3Operator || config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
+      departureTime: config.phase3Departure || config.departureTime || '23:55',
+      boardingPointSearch: config.phase3Boarding || 'Simhapuri',
+      droppingPointSearch: config.phase3Dropping || 'Electronic city'
+    }
+  };
+
+  let activePhaseId = forcedPhase;
+
+  if (!activePhaseId || !routes[activePhaseId]) {
+    const now = new Date();
+    const t1 = new Date('2026-08-30T15:30:00+05:30');
+    const t2 = new Date('2026-08-30T20:20:00+05:30');
+
+    if (now < t1) {
+      activePhaseId = 1;
+    } else if (now < t2) {
+      activePhaseId = 2;
+    } else {
+      activePhaseId = 3;
+    }
+  }
+
+  const selectedRoute = { ...routes[activePhaseId] };
+  if (forcedPhase && routes[forcedPhase]) {
+    selectedRoute.routeName = selectedRoute.routeName.replace('Phase', 'Phase [FORCED]');
+  }
+
+  return selectedRoute;
+}
+
+async function runRedbusAutomation(config, overrideHeadless = undefined, forcedPhase = null) {
+  const cutoffDateConfig = config.cutoffDateIST || '2026-08-31T01:00:00+05:30';
+  const cutoffISOString = cutoffDateConfig.includes('+') ? cutoffDateConfig : `${cutoffDateConfig}+05:30`;
   
-  // Cutoff Time Check (Runs till 1 AM tomorrow)
-  const nowIST = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
-  const now = new Date(nowIST);
-  const cutoff = new Date(cutoffDateIST);
+  // Cutoff Time Check (Global Date comparison using Unix Epoch timestamps)
+  const now = new Date();
+  const cutoff = new Date(cutoffISOString);
 
   if (now >= cutoff) {
     console.log(`\n==================================================`);
-    console.log(`[STOP CUTOFF REACHED] Current time in IST (${now.toLocaleString()}) matches/exceeds cutoff time ${cutoff.toLocaleString()}.`);
+    console.log(`[STOP CUTOFF REACHED] Current time (${now.toISOString()}) matches/exceeds cutoff time ${cutoff.toISOString()}.`);
     console.log(`Automation expired. Exiting cleanly.`);
     console.log(`==================================================\n`);
     return {
@@ -27,9 +88,11 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
       cutoffReached: true,
       seatAvailable: false,
       retryNeeded: false,
-      error: `Cutoff date ${cutoffDateIST} reached`
+      error: `Cutoff date ${cutoffDateConfig} reached`
     };
   }
+
+  const activeRoute = getActiveRoute(config, forcedPhase);
 
   const isHeadless = overrideHeadless !== undefined ? overrideHeadless : (config.headless !== false);
   const screenshotDir = path.join(__dirname, '..', 'screenshots');
@@ -38,14 +101,14 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const targetOperator = config.busOperator || 'Easy Go';
-  const departureTime = config.departureTime || '23:57';
-  const targetUrl = config.targetUrl;
-  const boardingPointSearch = config.boardingPointSearch || 'Clock Tower';
-  const droppingPointSearch = config.droppingPointSearch || 'Hebbal';
+  const targetOperator = activeRoute.busOperator;
+  const departureTime = activeRoute.departureTime;
+  const targetUrl = activeRoute.targetUrl;
+  const boardingPointSearch = activeRoute.boardingPointSearch;
+  const droppingPointSearch = activeRoute.droppingPointSearch;
 
   console.log(`\n==================================================`);
-  console.log(`[${new Date().toLocaleString()}] Checking Route...`);
+  console.log(`[${new Date().toLocaleString()}] Checking Route: ${activeRoute.routeName}`);
   console.log(`Headless Mode     : ${isHeadless}`);
   console.log(`Bus Operator      : ${targetOperator}`);
   console.log(`Departure Time    : ${departureTime}`);

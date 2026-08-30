@@ -21,6 +21,11 @@ const forceHeadful = args.includes('--headful');
 const maxDurIdx = args.indexOf('--max-duration');
 const maxDurationMinutes = maxDurIdx !== -1 && args[maxDurIdx + 1] ? parseFloat(args[maxDurIdx + 1]) : null;
 
+// Parse --phase flag (e.g., --phase 1, --phase 2, --phase 3, or --phase auto)
+const phaseIdx = args.indexOf('--phase');
+const phaseVal = phaseIdx !== -1 && args[phaseIdx + 1] ? args[phaseIdx + 1] : null;
+const forcedPhase = (phaseVal && phaseVal !== 'auto') ? parseInt(phaseVal, 10) : null;
+
 let intervalMinutes = config.intervalMinutes || 7;
 const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
 const overrideHeadless = forceHeadful ? false : undefined;
@@ -31,6 +36,7 @@ console.log(`==================================================`);
 console.log(` Bus Operator   : ${config.busOperator || 'Any'}`);
 console.log(` Departure Time : ${config.departureTime}`);
 console.log(` Target Seat    : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
+console.log(` Phase Mode     : ${forcedPhase ? `Forced Phase ${forcedPhase}` : 'Auto (Time-based Schedule)'}`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
 console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);
 console.log(`==================================================\n`);
@@ -56,7 +62,7 @@ async function executeWithSeatRetry() {
     const currentDelay = delayPattern[(attempt - 1) % delayPattern.length];
     console.log(`--- [Attempt #${attempt}] Checking seat availability ---`);
     
-    const res = await runRedbusAutomation(config, overrideHeadless);
+    const res = await runRedbusAutomation(config, overrideHeadless, forcedPhase);
 
     if (res.success) {
       console.log(`[SUCCESS] Seat booked and reached Checkout page!`);
