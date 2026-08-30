@@ -1,7 +1,7 @@
 {
-  "targetUrl": "https://www.redbus.in/bus-tickets/ananthapur-to-bangalore?fromCityName=Anantapur%20(andhra%20pradesh)&fromCityId=121&srcCountry=IND&fromCityType=CITY&toCityName=Bengaluru&toCityId=122&destCountry=India&toCityType=CITY&onward=30-Aug-2026&doj=30-Aug-2026",
-  "busOperator": "Sri Vengamamba Bus Transport (SVBT)",
-  "departureTime": "23:55",
+  "targetUrl": "https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate",
+  "busOperator": "Easy Go",
+  "departureTime": "16:20",
   "intervalMinutes": 7,
   "retryDelayPatternSeconds": [20, 40, 60],
   "keepBrowserOpenSeconds": 15,
@@ -14,7 +14,7 @@
     "seatIndex": 1
   },
   "boardingPointSearch": "Clock Tower",
-  "droppingPointSearch": "Tin Factory",
+  "droppingPointSearch": "Marathahalli",
   "passenger": {
     "name": "John Doe",
     "age": "38",

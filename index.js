@@ -31,7 +31,7 @@ const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
 const overrideHeadless = forceHeadful ? false : undefined;
 
 console.log(`==================================================`);
-console.log(` Bus Ticket Automation (Anantapur to Bangalore)`);
+console.log(` Easy Go Bus - Upper Deck 2nd Seat Automation`);
 console.log(`==================================================`);
 console.log(` Bus Operator   : ${config.busOperator || 'Any'}`);
 console.log(` Departure Time : ${config.departureTime}`);

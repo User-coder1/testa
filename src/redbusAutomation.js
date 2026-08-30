@@ -19,10 +19,10 @@ function getActiveRoute(config, forcedPhase = null) {
   const routes = {
     1: {
       phase: 1,
-      routeName: 'Phase 1: Nalgonda/Anantapur to Bangalore',
-      targetUrl: config.targetUrl || 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026',
-      busOperator: config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
-      departureTime: config.phase1Departure || config.departureTime || '23:55',
+      routeName: 'Phase 1: Nalgonda to Bangalore',
+      targetUrl: config.targetUrl || 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
+      busOperator: config.busOperator || 'Easy Go',
+      departureTime: config.phase1Departure || config.departureTime || '16:20',
       boardingPointSearch: config.boardingPointSearch || 'Clock Tower',
       droppingPointSearch: config.droppingPointSearch || 'Marathahalli'
     },
@@ -30,8 +30,8 @@ function getActiveRoute(config, forcedPhase = null) {
       phase: 2,
       routeName: 'Phase 2: Addanki to Bangalore',
       targetUrl: config.phase2Url || 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
-      busOperator: config.phase2Operator || config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
-      departureTime: config.phase2Departure || config.departureTime || '23:55',
+      busOperator: config.phase2Operator || config.busOperator || 'Easy Go',
+      departureTime: config.phase2Departure || config.departureTime || '20:30',
       boardingPointSearch: config.phase2Boarding || 'Opp Rtc Bus Stand',
       droppingPointSearch: config.phase2Dropping || 'K R Puram'
     },
@@ -39,8 +39,8 @@ function getActiveRoute(config, forcedPhase = null) {
       phase: 3,
       routeName: 'Phase 3: Nellore to Bangalore',
       targetUrl: config.phase3Url || 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
-      busOperator: config.phase3Operator || config.busOperator || 'Sri Vengamamba Bus Transport (SVBT)',
-      departureTime: config.phase3Departure || config.departureTime || '23:55',
+      busOperator: config.phase3Operator || config.busOperator || 'Easy Go',
+      departureTime: config.phase3Departure || config.departureTime || '23:59',
       boardingPointSearch: config.phase3Boarding || 'Simhapuri',
       droppingPointSearch: config.phase3Dropping || 'Electronic city'
     }
