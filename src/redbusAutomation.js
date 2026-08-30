@@ -386,7 +386,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
 
     // 4. Click Select Boarding & Dropping Points button
     console.log('Proceeding to Boarding & Dropping point selection...');
-    const selectBpDpBtn = page.locator('button:has-text("Select boarding"), button:has-text("boarding & dropping"), button:has-text("CONTINUE"), button:has-text("Continue")').first();
+    const selectBpDpBtn = page.locator('button[aria-label*="Select boarding" i], button[class*="primaryButton"]:has-text("Select boarding"), button:has-text("Select boarding & dropping points")').first();
     if (await selectBpDpBtn.isVisible().catch(() => false)) {
       await selectBpDpBtn.scrollIntoViewIfNeeded().catch(() => {});
       await selectBpDpBtn.click({ force: true });
@@ -455,88 +455,11 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     runResult.selectedDpId = dpDetails.dpId;
     await page.waitForTimeout(2500);
 
-    // Try sub-second createOrder POST API request using Playwright page context with fully dynamic IDs
-    try {
-      console.log(`Attempting fast createOrder API POST request for ${activeRoute.routeName}...`);
-      const p = config.passenger || {};
-      const srcId = activeRoute.targetUrl.match(/fromCityId=(\d+)/)?.[1] || "382";
-      const dstId = activeRoute.targetUrl.match(/toCityId=(\d+)/)?.[1] || "122";
-      const bpId = runResult.selectedBpId || "28319487";
-      const dpId = runResult.selectedDpId || "28320383";
-      const routeId = dynamicRouteId || "47529405";
-      const opId = dynamicOperatorId || "35818";
-
-      const apiRes = await page.request.post('https://www.redbus.in/rpw/api/createOrder', {
-        headers: {
-          'accept': '*/*',
-          'content-type': 'application/json',
-          'origin': 'https://www.redbus.in',
-          'referer': activeRoute.targetUrl
-        },
-        data: {
-          "IsOptIn": true,
-          "IsOptInForWhatsapp": true,
-          "IsAddOnSelected": false,
-          "IsCovidOptIn": false,
-          "items": [
-            {
-              "itemType": "BUS",
-              "journeyType": "ONWARD",
-              "bookingType": "",
-              "itemInfo": {
-                "SelectedCurrency": "INR",
-                "Trip": {
-                  "srcLocationId": srcId,
-                  "dstLocationId": dstId,
-                  "BoardingPointId": bpId,
-                  "DroppingPointId": dpId,
-                  "DateOfJourney": "30-Aug-2026",
-                  "RouteId": routeId,
-                  "SelectedSeats": [seatMatch.seatId || "L3"],
-                  "OperatorId": opId,
-                  "policyId": 0,
-                  "IsReturn": false,
-                  "isSingleLadyOpted": false,
-                  "PassengerList": [
-                    {
-                      "seatNumber": seatMatch.seatId || "L3",
-                      "solarId": 2,
-                      "IsPrimaryPassenger": true,
-                      "PaxList": {
-                        "1": (p.age || '38').toString(),
-                        "4": p.name || 'John Doe',
-                        "6": p.phone || '9876543210',
-                        "22": p.gender || 'Male',
-                        "201": "Telangana"
-                      },
-                      "userInputLanguage": "en"
-                    }
-                  ]
-                }
-              }
-            }
-          ],
-          "isRapAllowedTransaction": false,
-          "tags": ["TI_IND_15.0"],
-          "bT": 1,
-          "boName": activeRoute.busOperator || "Easy Go Bus"
-        }
-      });
-
-      if (apiRes.ok()) {
-        const bodyJson = await apiRes.json().catch(() => null);
-        console.log('[SUCCESS API] createOrder POST API executed successfully!', bodyJson ? JSON.stringify(bodyJson).slice(0, 150) : '');
-      } else {
-        console.log(`[API NOTE] createOrder API returned status ${apiRes.status()}. Continuing DOM checkout flow...`);
-      }
-    } catch (apiErr) {
-      console.log(`[API NOTE] Direct API request notice: ${apiErr.message}. Continuing DOM checkout flow...`);
-    }
-
     // 7. Click Proceed / Transition to Passenger Details Form
     console.log('Transitioning to Passenger Info view...');
-    const proceedToPassengerBtn = page.locator('button:has-text("Proceed"), button:has-text("Fill Passenger"), button:has-text("CONTINUE"), button:has-text("Continue"), div[class*="button"]:has-text("Proceed")').first();
+    const proceedToPassengerBtn = page.locator('button[class*="primaryButton"]:has-text("Continue booking"), button[class*="primaryButton"]:has-text("Proceed"), button[class*="primaryButton"]:has-text("Fill Passenger"), button:has-text("Fill Passenger Details"), button:has-text("Proceed")').first();
     if (await proceedToPassengerBtn.isVisible().catch(() => false)) {
+      console.log('Clicking primary CTA button with text:', await proceedToPassengerBtn.innerText().catch(() => ''));
       await proceedToPassengerBtn.click({ force: true });
       await page.waitForTimeout(4000);
     } else {
@@ -614,43 +537,63 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     }
     console.log('Selected Gender: Male');
 
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1000);
 
-    // Handle State of Residence modal/dropdown if open
-    const stateOption = page.locator('li:has-text("Telangana"), label:has-text("Telangana"), radio[value*="Telangana"]').first();
-    if (await stateOption.isVisible().catch(() => false)) {
-      console.log('Selecting State of Residence (Telangana)...');
-      await stateOption.click({ force: true }).catch(() => {});
-      await page.waitForTimeout(1000);
-    }
-    await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(1500);
+    // Handle State of Residence modal/dropdown if open or required (#STATE_LIST)
+    console.log('Checking State of Residence selection...');
+    await page.evaluate(() => {
+      const stateItem = Array.from(document.querySelectorAll('li, div[class*="state"], span')).find(e => e.innerText && /Telangana|Andhra Pradesh|Karnataka/i.test(e.innerText.trim()));
+      if (stateItem) stateItem.click();
+    });
+    
+    // We used to press Escape here, but that closes the entire passenger details modal/drawer on Redbus!
+    // Simply clicking the state or ignoring it is enough.
+    await page.waitForTimeout(1000);
 
     // 9. Select "Don't add Travel Insurance"
     console.log('Selecting "Don\'t add Travel Insurance"...');
-    const rejectInsuranceRadio = page.locator('input#insuranceRejectBtn, label[for="insuranceRejectBtn"], input[id*="Reject" i]').first();
-    if (await rejectInsuranceRadio.isVisible().catch(() => false)) {
-      await rejectInsuranceRadio.click({ force: true }).catch(() => {});
-      console.log('Selected "Don\'t add Travel Insurance" (insuranceRejectBtn)');
-    } else {
-      const rejectInsuranceText = page.locator('text=/Don’t add Travel Insurance|No, I don\'t want travel insurance|Unsecure my trip|No insurance/i').first();
-      if (await rejectInsuranceText.isVisible().catch(() => false)) {
-        await rejectInsuranceText.click({ force: true }).catch(() => {});
-        console.log('Selected "Don\'t add Travel Insurance" text locator');
+    await page.evaluate(() => {
+      const radio = document.getElementById('insuranceRejectBtn');
+      if (radio) {
+        const parentLabel = radio.closest('label') || radio.parentElement;
+        if (parentLabel) parentLabel.click();
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+        radio.dispatchEvent(new Event('click', { bubbles: true }));
+      } else {
+        const elements = Array.from(document.querySelectorAll('label, div, span'));
+        const target = elements.find(el => el.innerText && /Don’t add Travel Insurance|Don't add Travel Insurance|No, I don't want/i.test(el.innerText.trim()));
+        if (target) target.click();
       }
-    }
-    await page.waitForTimeout(2000);
+    });
+    await page.waitForTimeout(1000);
 
-    // 10. Click "Continue booking" / "Proceed to pay" button
+    // 10. 5-Second Pause before hitting Continue Booking (Requested by User)
+    console.log('Waiting 5 seconds before clicking "Continue booking" button...');
+    await page.waitForTimeout(5000);
+
+    // 11. Click "Continue booking" / "Proceed to pay" button
     console.log('Clicking "Continue booking" button...');
-    const continueBookingBtn = page.locator('button:has-text("Continue booking"), button:has-text("CONTINUE BOOKING"), button:has-text("Proceed to pay"), button:has-text("Proceed to Pay"), button:has-text("PROCEED TO PAY"), button:has-text("Pay")').first();
-    if (await continueBookingBtn.isVisible().catch(() => false)) {
-      await continueBookingBtn.scrollIntoViewIfNeeded().catch(() => {});
-      await continueBookingBtn.click({ force: true });
-      await page.waitForTimeout(6000);
+    const clicked = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button, input[type="submit"], div[class*="button"]'));
+      const btn = btns.find(b => b.innerText && /continue booking|proceed/i.test(b.innerText.trim()));
+      if (btn) {
+        btn.click();
+        return true;
+      }
+      return false;
+    });
+
+    if (!clicked) {
+      const continueBookingBtn = page.locator('button[class*="primaryButton"]').filter({ hasText: /Continue booking|Proceed/i }).first();
+      await continueBookingBtn.click({ force: true }).catch(() => {});
     }
 
-    // 11. Save Checkout Screenshot
+    // Wait for URL to transition to paymentDetails
+    console.log('Waiting for navigation to https://www.redbus.in/paymentDetails...');
+    await page.waitForURL(url => url.href.includes('paymentDetails') || url.href.includes('checkout') || url.href.includes('payment'), { timeout: 15000 }).catch(() => {});
+
+    // 13. Save Checkout Screenshot
     const screenshotPath = path.join(screenshotDir, `checkout_${timestamp}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: false });
     console.log(`Saved checkout screenshot: ${screenshotPath}`);
@@ -658,14 +601,19 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     runResult.success = true;
     runResult.screenshot = screenshotPath;
     console.log(`\n==================================================`);
-    console.log(`[SUCCESS] Passenger Info filled, Insurance rejected, & clicked Continue booking!`);
+    console.log(`[SUCCESS] Passenger Info filled & reached Payment page (${page.url()})!`);
     console.log(`==================================================`);
 
-    // 12. Keep browser open for 15 seconds before closing as requested
-    const keepOpenMs = (config.keepBrowserOpenSeconds || 15) * 1000;
-    console.log(`\nKeeping browser open for ${config.keepBrowserOpenSeconds || 15} seconds before closing...`);
-    await page.waitForTimeout(keepOpenMs);
-    console.log('15-second wait complete.');
+    // 12. Keep browser open for manual payment if not headless
+    if (!isHeadless) {
+      console.log('Leaving browser open indefinitely for manual payment. Please complete your transaction.');
+      await new Promise(() => {}); // Hang indefinitely
+    } else {
+      const keepOpenMs = (config.keepBrowserOpenSeconds || 15) * 1000;
+      console.log(`Keeping headless browser open for ${keepOpenMs / 1000} seconds before closing...`);
+      await page.waitForTimeout(keepOpenMs);
+      console.log('Wait complete.');
+    }
 
   } catch (err) {
     console.error(`\n[ERROR] Automation run failed: ${err.message}`);
