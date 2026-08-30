@@ -11,9 +11,9 @@ const randomJitter = (minMs = 1200, maxMs = 3500) => {
 
 /**
  * Helper to get active route config based on current IST timestamp or forced phase CLI flag
- * Phase 1 (Until Aug 30 3:30 PM IST): Nalgonda/Anantapur to Bangalore (Clock Tower -> Marathahalli)
- * Phase 2 (Aug 30 3:30 PM IST - 8:20 PM IST): Addanki to Bangalore (Opp Rtc Bus Stand -> K R Puram)
- * Phase 3 (After Aug 30 8:20 PM IST): Nellore to Bangalore (Simhapuri -> Electronic city)
+ * Phase 1 (Until Aug 30 3:30 PM IST): Nalgonda to Bangalore (Clock Tower -> Marathahalli)
+ * Phase 2 (Aug 30 3:30 PM IST - 4:15 PM IST): Addanki to Bangalore (Opp Rtc Bus Stand -> K R Puram)
+ * Phase 3 (After Aug 30 4:15 PM IST): Nellore to Bangalore (Simhapuri -> Electronic city)
  */
 function getActiveRoute(config, forcedPhase = null) {
   const routes = {
@@ -51,7 +51,7 @@ function getActiveRoute(config, forcedPhase = null) {
   if (!activePhaseId || !routes[activePhaseId]) {
     const now = new Date();
     const t1 = new Date('2026-08-30T15:30:00+05:30');
-    const t2 = new Date('2026-08-30T20:20:00+05:30');
+    const t2 = new Date('2026-08-30T16:15:00+05:30');
 
     if (now < t1) {
       activePhaseId = 1;
