@@ -1,20 +1,20 @@
 {
   "targetUrl": "https://www.redbus.in/bus-tickets/ananthapur-to-bangalore?fromCityName=Anantapur%20(andhra%20pradesh)&fromCityId=121&srcCountry=IND&fromCityType=CITY&toCityName=Bengaluru&toCityId=122&destCountry=India&toCityType=CITY&onward=30-Aug-2026&doj=30-Aug-2026",
-  "busOperator": "Easy Go",
-  "departureTime": "23:57",
+  "busOperator": "Sri Vengamamba Bus Transport (SVBT)",
+  "departureTime": "23:55",
   "intervalMinutes": 7,
   "retryDelayPatternSeconds": [20, 40, 60],
   "keepBrowserOpenSeconds": 15,
   "maxUnavailableRetries": 100,
   "cutoffDateIST": "2026-08-31T01:00:00",
   "headless": true,
-  "targetSeatNumber": "U1",
+  "targetSeatNumber": "U2",
   "seatPreference": {
     "deck": "upper",
-    "seatIndex": 0
+    "seatIndex": 1
   },
   "boardingPointSearch": "Clock Tower",
-  "droppingPointSearch": "Hebbal BMTC Bus stand",
+  "droppingPointSearch": "Tin Factory",
   "passenger": {
     "name": "John Doe",
     "age": "38",

@@ -30,9 +30,9 @@ console.log(` Bus Ticket Automation (Anantapur to Bangalore)`);
 console.log(`==================================================`);
 console.log(` Bus Operator   : ${config.busOperator || 'Any'}`);
 console.log(` Departure Time : ${config.departureTime}`);
-console.log(` Target Seat    : Upper Deck 1st Seat (Seat ${config.targetSeatNumber || 'U1'})`);
+console.log(` Target Seat    : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
-console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? \`Active Loop (\${maxDurationMinutes} mins)\` : 'Continuous Schedule'}`);
+console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);
 console.log(`==================================================\n`);
 
 async function sleep(ms) {

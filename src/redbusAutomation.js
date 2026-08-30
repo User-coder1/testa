@@ -49,7 +49,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
   console.log(`Headless Mode     : ${isHeadless}`);
   console.log(`Bus Operator      : ${targetOperator}`);
   console.log(`Departure Time    : ${departureTime}`);
-  console.log(`Seat Position     : Upper Deck 1st Seat (Seat ${config.targetSeatNumber || 'U1'})`);
+  console.log(`Seat Position     : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
   console.log(`Pickup Location   : ${boardingPointSearch}`);
   console.log(`Drop Location     : ${droppingPointSearch}`);
   console.log(`Target URL        : ${targetUrl}`);
@@ -112,7 +112,8 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     await page.screenshot({ path: path.join(screenshotDir, `initial_load_${timestamp}.png`), fullPage: true }).catch(() => {});
 
     const busCard = await (async () => {
-      const searchPattern = new RegExp(`${targetOperator}|${departureTime}`, 'i');
+      const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchPattern = new RegExp(`${escapeRegExp(targetOperator)}|${escapeRegExp(departureTime)}`, 'i');
       const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: searchPattern }).first();
 
       console.log(`Strategy 1: Progressive page scroll to scan for "${targetOperator}" or "${departureTime}"...`);
@@ -168,7 +169,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     await viewBtn.click();
     await randomJitter(2500, 4500);
 
-    const targetSeatNumber = config.targetSeatNumber || 'U1';
+    const targetSeatNumber = config.targetSeatNumber || 'U2';
     console.log(`Scanning seats layout for Target Seat "${targetSeatNumber}"...`);
 
     const seatMatch = await page.evaluate((seatNo) => {
@@ -180,12 +181,12 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
         return id === seatNo.toUpperCase() || aria.includes(`SEAT NUMBER ${seatNo.toUpperCase()}`);
       });
 
-      if (!found && seatNo.toUpperCase() === 'U1') {
+      if (!found && seatNo.toUpperCase() === 'U2') {
         const deckSections = Array.from(document.querySelectorAll('div[class*="deckSection"]'));
         const upperSec = deckSections.find(s => (s.innerText || '').includes('Upper deck'));
         if (upperSec) {
           const upperSpans = Array.from(upperSec.querySelectorAll('span[aria-label]'));
-          found = upperSpans[0];
+          found = upperSpans[1] || upperSpans[0];
         }
       }
 
@@ -236,18 +237,42 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     await page.waitForTimeout(3000);
 
     console.log(`Selecting Boarding Point matching "${boardingPointSearch}"...`);
+    const bpTab = page.locator('div[class*="tab"], li[class*="tab"], span[class*="tab"]').filter({ hasText: /Board/i }).first();
+    if (await bpTab.isVisible().catch(() => false)) {
+      await bpTab.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(500);
+    }
+
     const bpDetails = await page.evaluate((searchTerm) => {
-      const inputs = Array.from(document.querySelectorAll('input[name^="bp_"]'));
+      let inputs = Array.from(document.querySelectorAll('input[name^="bp_"]'));
+      if (inputs.length === 0) {
+        inputs = Array.from(document.querySelectorAll('input[type="radio"]'));
+      }
+      
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
         const parent = i.closest('li') || i.closest('label') || i.parentElement;
         const text = parent ? parent.innerText.toLowerCase().replace(/\s+/g, '') : '';
         return text.includes(cleanSearch);
-      }) || inputs[0];
+      });
+
+      if (!match) {
+        const elems = Array.from(document.querySelectorAll('li, div[class*="point"], div[class*="radio"], div[class*="bpdp"]'));
+        const textMatch = elems.find(el => el.innerText && el.innerText.toLowerCase().replace(/\s+/g, '').includes(cleanSearch) && el.children.length < 6);
+        if (textMatch) {
+          textMatch.click();
+          return textMatch.innerText.trim().replace(/\s+/g, ' ');
+        }
+      }
+
+      if (!match && inputs.length > 0) {
+        match = inputs[0];
+      }
 
       if (match) {
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
-        label.click();
+        if (label) label.click();
+        else match.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
         return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
       }
@@ -259,18 +284,43 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     await page.waitForTimeout(2000);
 
     console.log(`Selecting Dropping Point matching "${droppingPointSearch}"...`);
+
+    const dpTab = page.locator('div[class*="tab"], li[class*="tab"], span[class*="tab"]').filter({ hasText: /Drop/i }).first();
+    if (await dpTab.isVisible().catch(() => false)) {
+      await dpTab.click({ force: true }).catch(() => {});
+      await page.waitForTimeout(1000);
+    }
+
     const dpDetails = await page.evaluate((searchTerm) => {
-      const inputs = Array.from(document.querySelectorAll('input[name^="dp_"]'));
+      let inputs = Array.from(document.querySelectorAll('input[name^="dp_"]'));
+      if (inputs.length === 0) {
+        inputs = Array.from(document.querySelectorAll('input[type="radio"]'));
+      }
+
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
       let match = inputs.find(i => {
         const parent = i.closest('li') || i.closest('label') || i.parentElement;
         const text = parent ? parent.innerText.toLowerCase().replace(/\s+/g, '') : '';
         return text.includes(cleanSearch);
-      }) || inputs[0];
+      });
+
+      if (!match) {
+        const elems = Array.from(document.querySelectorAll('li, div[class*="point"], div[class*="radio"], div[class*="bpdp"]'));
+        const textMatch = elems.find(el => el.innerText && el.innerText.toLowerCase().replace(/\s+/g, '').includes(cleanSearch) && el.children.length < 6);
+        if (textMatch) {
+          textMatch.click();
+          return textMatch.innerText.trim().replace(/\s+/g, ' ');
+        }
+      }
+
+      if (!match && inputs.length > 0) {
+        match = inputs[0];
+      }
 
       if (match) {
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
-        label.click();
+        if (label) label.click();
+        else match.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
         return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
       }
@@ -327,15 +377,59 @@ async function runRedbusAutomation(config, overrideHeadless = undefined) {
     
     await page.waitForTimeout(1000);
 
+    console.log('Selecting "Don\'t add Trip Guarantee", "Don\'t add Free Cancellation", and "Don\'t add Travel Insurance"...');
+    
+    const rejectTexts = [
+      "Don't add Free Cancellation",
+      "Don’t add Free Cancellation",
+      "Don't add Trip Guarantee",
+      "Don’t add Trip Guarantee",
+      "Don't add Travel Insurance",
+      "Don’t add Travel Insurance",
+      "No, I don't want"
+    ];
+
+    for (const text of rejectTexts) {
+      try {
+        // Try exact match first
+        let loc = page.getByText(text, { exact: true }).first();
+        if (await loc.isVisible().catch(() => false)) {
+          console.log(`Clicking exact text: "${text}"`);
+          // Click the element itself
+          await loc.click({ force: true }).catch(() => {});
+          // Click its parent container as well to ensure event bubbling catches it
+          await loc.locator('..').click({ force: true }).catch(() => {});
+          await page.waitForTimeout(500);
+          continue;
+        }
+
+        // Try partial match if exact didn't work
+        loc = page.getByText(text).first();
+        if (await loc.isVisible().catch(() => false)) {
+          console.log(`Clicking partial text: "${text}"`);
+          await loc.click({ force: true }).catch(() => {});
+          await loc.locator('..').click({ force: true }).catch(() => {});
+          await page.waitForTimeout(500);
+        }
+      } catch (e) {
+        // Ignore errors for individual text clicks
+      }
+    }
+
+    // Direct fallback for insurance radio button ID often used by RedBus
+    const insuranceRadio = page.locator('input#insuranceRejectBtn, input[value="false"][type="radio"]');
+    if (await insuranceRadio.first().isVisible().catch(() => false)) {
+       await insuranceRadio.first().check({ force: true }).catch(() => {});
+       await insuranceRadio.first().click({ force: true }).catch(() => {});
+    }
+
+    // Final fallback using evaluate just in case it's in a weird state
     await page.evaluate(() => {
       const radio = document.getElementById('insuranceRejectBtn');
-      if (radio) {
-        const parentLabel = radio.closest('label') || radio.parentElement;
-        if (parentLabel) parentLabel.click();
-      } else {
-        const elements = Array.from(document.querySelectorAll('label, div, span'));
-        const target = elements.find(el => el.innerText && /Don’t add Travel Insurance|Don't add Travel Insurance|No, I don't want/i.test(el.innerText.trim()));
-        if (target) target.click();
+      if (radio && !radio.checked) {
+        radio.click();
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
     
