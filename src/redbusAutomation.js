@@ -256,6 +256,10 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
 
     // 2. Open Seat View for Target Bus Operator (Easy Go)
     console.log(`Locating bus card for operator matching "${targetOperator}" (Departure: ${activeRoute.departureTime})...`);
+    
+    // Debug: take a screenshot of the initial loaded page
+    await page.screenshot({ path: path.join(screenshotDir, `initial_load_${timestamp}.png`), fullPage: true }).catch(() => {});
+
     const busCard = await (async () => {
       const searchPattern = activeRoute.departureTime 
         ? new RegExp(`Easy\\s*Go|${activeRoute.departureTime}`, 'i')
@@ -269,25 +273,27 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         await page.evaluate(() => window.scrollBy(0, 1000));
         await page.waitForTimeout(400);
         const card = getCardLocator();
-        if (await card.isVisible().catch(() => false)) {
+        if (await card.count() > 0) {
           console.log(`[FOUND] Bus card matched via Strategy 1 (Progressive Scroll).`);
-          return card;
+          await card.first().scrollIntoViewIfNeeded().catch(() => {});
+          return card.first();
         }
       }
 
       // Strategy 2: Departure Time Sorting (Brings evening/night buses like 20:30 / 23:59 to top)
       console.log(`Strategy 2: Clicking "Departure time" sort tab...`);
       const depSortBtn = page.locator('text=/Departure time/i').first();
-      if (await depSortBtn.isVisible().catch(() => false)) {
+      if (await depSortBtn.count() > 0) {
         await depSortBtn.click({ force: true }).catch(() => {});
         await page.waitForTimeout(2500);
         for (let i = 0; i < 8; i++) {
           await page.evaluate(() => window.scrollBy(0, 1000));
           await page.waitForTimeout(400);
           const card = getCardLocator();
-          if (await card.isVisible().catch(() => false)) {
+          if (await card.count() > 0) {
             console.log(`[FOUND] Bus card matched via Strategy 2 (Departure Time Sort).`);
-            return card;
+            await card.first().scrollIntoViewIfNeeded().catch(() => {});
+            return card.first();
           }
         }
       }
@@ -298,16 +304,17 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         await page.evaluate(() => window.scrollBy(0, 1500));
         await page.waitForTimeout(400);
         const card = getCardLocator();
-        if (await card.isVisible().catch(() => false)) {
+        if (await card.count() > 0) {
           console.log(`[FOUND] Bus card matched via Strategy 3 (Deep Scroll).`);
-          return card;
+          await card.first().scrollIntoViewIfNeeded().catch(() => {});
+          return card.first();
         }
       }
 
-      return getCardLocator();
+      return getCardLocator().first();
     })();
 
-    if (!(await busCard.isVisible().catch(() => false))) {
+    if (await busCard.count() === 0) {
       throw new Error(`Bus card container for operator "${targetOperator}" was not found on search page`);
     }
 
@@ -618,8 +625,14 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
   } catch (err) {
     console.error(`\n[ERROR] Automation run failed: ${err.message}`);
     runResult.error = err.message;
+    runResult.retryNeeded = true; // Retry on generic errors (like page load failures or bot blocks)
     const errorScreenshot = path.join(screenshotDir, `error_${timestamp}.png`);
-    await page.screenshot({ path: errorScreenshot, fullPage: false }).catch(() => {});
+    try {
+      await page.screenshot({ path: errorScreenshot, fullPage: true });
+      console.log(`Saved error screenshot: ${errorScreenshot}`);
+    } catch (ssErr) {
+      console.log(`Failed to save error screenshot: ${ssErr.message}`);
+    }
     runResult.screenshot = errorScreenshot;
   } finally {
     await browser.close();
