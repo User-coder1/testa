@@ -21,22 +21,18 @@ const forceHeadful = args.includes('--headful');
 const maxDurIdx = args.indexOf('--max-duration');
 const maxDurationMinutes = maxDurIdx !== -1 && args[maxDurIdx + 1] ? parseFloat(args[maxDurIdx + 1]) : null;
 
-// Parse --phase flag (e.g., --phase 1, --phase 2, --phase 3)
-const phaseIdx = args.indexOf('--phase');
-const forcedPhase = phaseIdx !== -1 && args[phaseIdx + 1] ? parseInt(args[phaseIdx + 1], 10) : null;
-
 let intervalMinutes = config.intervalMinutes || 7;
 const delayPattern = config.retryDelayPatternSeconds || [20, 40, 60];
 const overrideHeadless = forceHeadful ? false : undefined;
 
 console.log(`==================================================`);
-console.log(` Easy Go Bus - Upper Deck 2nd Seat Automation`);
+console.log(` Bus Ticket Automation (Anantapur to Bangalore)`);
 console.log(`==================================================`);
-console.log(` Bus Operator   : ${config.busOperator || 'Easy Go'}`);
-console.log(` Target Seat    : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
-console.log(` Forced Phase   : ${forcedPhase ? `Phase ${forcedPhase}` : 'Auto (Time-based)'}`);
+console.log(` Bus Operator   : ${config.busOperator || 'Any'}`);
+console.log(` Departure Time : ${config.departureTime}`);
+console.log(` Target Seat    : Upper Deck 1st Seat (Seat ${config.targetSeatNumber || 'U1'})`);
 console.log(` Retry Pattern  : ${delayPattern.join('s -> ')}s (repeating cycle)`);
-console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? `Active Loop (${maxDurationMinutes} mins)` : 'Continuous Schedule'}`);
+console.log(` Execution Mode : ${runOnce ? 'Single Run (--once)' : maxDurationMinutes ? \`Active Loop (\${maxDurationMinutes} mins)\` : 'Continuous Schedule'}`);
 console.log(`==================================================\n`);
 
 async function sleep(ms) {
@@ -49,7 +45,6 @@ async function executeWithSeatRetry() {
   const startTime = Date.now();
 
   while (attempt <= maxRetries) {
-    // Check max-duration timeout if specified
     if (maxDurationMinutes) {
       const elapsedMins = (Date.now() - startTime) / (1000 * 60);
       if (elapsedMins >= maxDurationMinutes) {
@@ -58,24 +53,23 @@ async function executeWithSeatRetry() {
       }
     }
 
-    // Get progressive cyclical delay for this attempt
     const currentDelay = delayPattern[(attempt - 1) % delayPattern.length];
-
-    console.log(`--- [Attempt #${attempt}] Checking Upper Deck 2nd seat availability ---`);
-    const res = await runRedbusAutomation(config, overrideHeadless, forcedPhase);
+    console.log(`--- [Attempt #${attempt}] Checking seat availability ---`);
+    
+    const res = await runRedbusAutomation(config, overrideHeadless);
 
     if (res.success) {
       console.log(`[SUCCESS] Seat booked and reached Checkout page!`);
       return res;
     }
 
-    if (res.cutoffReached || res.notAllowedDay || res.inBlackoutWindow) {
-      console.log(`[STOP] Execution halted (weekday skip, time window skip, or cutoff reached). Stopping retry loop.`);
+    if (res.cutoffReached) {
+      console.log(`[STOP] Execution halted (cutoff time reached). Stopping retry loop.`);
       return res;
     }
 
     if (res.retryNeeded && !runOnce) {
-      console.log(`\n[RETRY PATTERN] Seat U2 is unavailable. Waiting ${currentDelay} seconds before Attempt #${attempt + 1}... (Pattern cycle: ${delayPattern.join('s -> ')}s)\n`);
+      console.log(`\n[RETRY PATTERN] Target seat is unavailable. Waiting ${currentDelay} seconds before Attempt #${attempt + 1}... (Pattern cycle: ${delayPattern.join('s -> ')}s)\n`);
       await sleep(currentDelay * 1000);
       attempt++;
     } else {

@@ -1,20 +1,20 @@
 {
-  "targetUrl": "https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate",
+  "targetUrl": "https://www.redbus.in/bus-tickets/ananthapur-to-bangalore?fromCityName=Anantapur%20(andhra%20pradesh)&fromCityId=121&srcCountry=IND&fromCityType=CITY&toCityName=Bengaluru&toCityId=122&destCountry=India&toCityType=CITY&onward=30-Aug-2026&doj=30-Aug-2026",
   "busOperator": "Easy Go",
+  "departureTime": "23:57",
   "intervalMinutes": 7,
   "retryDelayPatternSeconds": [20, 40, 60],
   "keepBrowserOpenSeconds": 15,
   "maxUnavailableRetries": 100,
-  "cutoffDateIST": "2026-09-01",
-  "allowedDaysIST": ["Saturday", "Sunday", "Monday"],
+  "cutoffDateIST": "2026-08-31T01:00:00",
   "headless": true,
-  "targetSeatNumber": "U2",
+  "targetSeatNumber": "U1",
   "seatPreference": {
     "deck": "upper",
-    "seatIndex": 1
+    "seatIndex": 0
   },
   "boardingPointSearch": "Clock Tower",
-  "droppingPointSearch": "Marathahalli",
+  "droppingPointSearch": "Hebbal BMTC Bus stand",
   "passenger": {
     "name": "John Doe",
     "age": "38",

@@ -4,154 +4,22 @@ const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 chromium.use(stealth);
 
-/**
- * Helper to generate human-like randomized delays between actions
- */
 const randomJitter = (minMs = 1200, maxMs = 3500) => {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-/**
- * Helper to get current date formatted in IST (Asia/Kolkata) as YYYY-MM-DD
- */
-function getISTDateString() {
-  const options = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
-  const formatter = new Intl.DateTimeFormat('en-CA', options); // YYYY-MM-DD
-  return formatter.format(new Date());
-}
-
-/**
- * Helper to get current day of week in IST (Asia/Kolkata) (e.g., "Saturday", "Sunday")
- */
-function getISTDayOfWeek() {
-  const options = { timeZone: 'Asia/Kolkata', weekday: 'long' };
-  return new Intl.DateTimeFormat('en-US', options).format(new Date());
-}
-
-/**
- * Helper to get current hour in IST (0-23)
- */
-function getISTHour() {
-  const options = { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false };
-  const str = new Intl.DateTimeFormat('en-US', options).format(new Date());
-  return parseInt(str, 10);
-}
-
-/**
- * Helper to get active route config based on current IST timestamp or forced phase CLI flag
- * Phase 1 (Until Aug 30 4:00 PM IST): Nalgonda to Bangalore (Clock Tower -> Marathahalli)
- * Phase 2 (Aug 30 4:00 PM IST - 8:20 PM IST): Addanki to Nellore (Opp Rtc Bus Stand -> Simhapuri)
- * Phase 3 (After Aug 30 8:20 PM IST): Nellore to Bangalore (Simhapuri -> Electronic city)
- */
-function getActiveRoute(config, forcedPhase = null) {
-  if (forcedPhase === 1) {
-    return {
-      phase: 1,
-      routeName: 'Phase 1 [FORCED TEST]: Nalgonda to Bangalore',
-      targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
-      busOperator: 'Easy Go',
-      departureTime: '16:20',
-      boardingPointSearch: 'Clock Tower',
-      droppingPointSearch: 'Marathahalli'
-    };
-  }
-  if (forcedPhase === 2) {
-    return {
-      phase: 2,
-      routeName: 'Phase 2 [FORCED TEST]: Addanki to Bangalore',
-      targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
-      busOperator: 'Easy Go',
-      departureTime: '20:30',
-      boardingPointSearch: 'Opp Rtc Bus Stand',
-      droppingPointSearch: 'K R Puram'
-    };
-  }
-  if (forcedPhase === 3) {
-    return {
-      phase: 3,
-      routeName: 'Phase 3 [FORCED TEST]: Nellore to Bangalore',
-      targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
-      busOperator: 'Easy Go',
-      departureTime: '23:59',
-      boardingPointSearch: 'Simhapuri',
-      droppingPointSearch: 'Electronic city'
-    };
-  }
-
-  const now = new Date();
+async function runRedbusAutomation(config, overrideHeadless = undefined) {
+  const cutoffDateIST = config.cutoffDateIST || '2026-08-31T01:00:00';
   
-  // Threshold 1: Aug 30, 2026 at 4:00 PM IST (16:00:00+05:30)
-  const t1_4pm = new Date('2026-08-30T16:00:00+05:30');
+  // Cutoff Time Check (Runs till 1 AM tomorrow)
+  const nowIST = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
+  const now = new Date(nowIST);
+  const cutoff = new Date(cutoffDateIST);
 
-  // Threshold 2: Aug 30, 2026 at 8:20 PM IST (20:20:00+05:30)
-  const t2_820pm = new Date('2026-08-30T20:20:00+05:30');
-
-  if (now < t1_4pm) {
-    return {
-      phase: 1,
-      routeName: 'Phase 1: Nalgonda to Bangalore (Until Aug 30 4:00 PM IST)',
-      targetUrl: 'https://www.redbus.in/bus-tickets/nalgonda-to-bangalore?fromCityName=Nalgonda&toCityName=Bangalore&fromCityId=95474&toCityId=122&onward=30-Aug-2026&return=NaN-undefined-NaN&ref=modifyDate',
-      busOperator: 'Easy Go',
-      departureTime: '16:20',
-      boardingPointSearch: 'Clock Tower',
-      droppingPointSearch: 'Marathahalli'
-    };
-  } else if (now >= t1_4pm && now < t2_820pm) {
-    return {
-      phase: 2,
-      routeName: 'Phase 2: Addanki to Bangalore (Aug 30 4:00 PM - 8:20 PM IST)',
-      targetUrl: 'https://www.redbus.in/bus-tickets/addanki-to-bangalore?fromCityName=Addanki&fromCityId=382&toCityName=Bangalore&toCityId=122&onward=30-Aug-2026',
-      busOperator: 'Easy Go',
-      departureTime: '20:30',
-      boardingPointSearch: 'Opp Rtc Bus Stand',
-      droppingPointSearch: 'K R Puram'
-    };
-  } else {
-    return {
-      phase: 3,
-      routeName: 'Phase 3: Nellore to Bangalore (After Aug 30 8:20 PM IST)',
-      targetUrl: 'https://www.redbus.in/bus-tickets/nellore-to-bangalore?fromCityName=Nellore&toCityName=Bangalore&fromCityId=131&toCityId=122&onward=30-Aug-2026',
-      busOperator: 'Easy Go',
-      departureTime: '23:59',
-      boardingPointSearch: 'Simhapuri',
-      droppingPointSearch: 'Electronic city'
-    };
-  }
-}
-
-/**
- * Executes a single run of Redbus seat booking automation targeting Easy Go bus and Upper Deck 2nd seat.
- * @param {Object} config Automation configuration object
- * @param {boolean} overrideHeadless Option to override headless setting
- * @param {number} forcedPhase Optional phase override (1, 2, or 3)
- */
-async function runRedbusAutomation(config, overrideHeadless = undefined, forcedPhase = null) {
-  const activeRoute = getActiveRoute(config, forcedPhase);
-  const currentISTDate = getISTDateString();
-  const currentISTDay = getISTDayOfWeek();
-  const cutoffDate = config.cutoffDateIST || '2026-09-01';
-  const allowedDays = config.allowedDaysIST || ['Saturday', 'Sunday', 'Monday'];
-
-  // Check 1: Day of Week Check (Saturday, Sunday, and Monday)
-  if (!allowedDays.includes(currentISTDay)) {
+  if (now >= cutoff) {
     console.log(`\n==================================================`);
-    console.log(`[SKIP WEEKDAY] Today in IST is ${currentISTDay}.`);
-    console.log(`Automation is configured to run ONLY on ${allowedDays.join(', ')}.`);
-    console.log(`==================================================\n`);
-    return {
-      success: false,
-      notAllowedDay: true,
-      seatAvailable: false,
-      retryNeeded: false,
-      error: `Today (${currentISTDay}) is not an allowed running day`
-    };
-  }
-
-  // Check 2: Cutoff Date Check (Runs through Aug 31st, stops on Sept 1st IST)
-  if (currentISTDate >= cutoffDate) {
-    console.log(`\n==================================================`);
-    console.log(`[STOP CUTOFF REACHED] Today's date in IST is ${currentISTDate}, which matches/exceeds cutoff date ${cutoffDate}.`);
+    console.log(`[STOP CUTOFF REACHED] Current time in IST (${now.toLocaleString()}) matches/exceeds cutoff time ${cutoff.toLocaleString()}.`);
     console.log(`Automation expired. Exiting cleanly.`);
     console.log(`==================================================\n`);
     return {
@@ -159,7 +27,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
       cutoffReached: true,
       seatAvailable: false,
       retryNeeded: false,
-      error: `Cutoff date ${cutoffDate} reached`
+      error: `Cutoff date ${cutoffDateIST} reached`
     };
   }
 
@@ -170,18 +38,21 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const targetOperator = activeRoute.busOperator;
-  const targetSeatIdx = config.seatPreference?.seatIndex !== undefined ? config.seatPreference.seatIndex : 1; // 2nd seat (index 1)
+  const targetOperator = config.busOperator || 'Easy Go';
+  const departureTime = config.departureTime || '23:57';
+  const targetUrl = config.targetUrl;
+  const boardingPointSearch = config.boardingPointSearch || 'Clock Tower';
+  const droppingPointSearch = config.droppingPointSearch || 'Hebbal';
 
   console.log(`\n==================================================`);
-  console.log(`[${new Date().toLocaleString()}] Checking Route: ${activeRoute.routeName}`);
+  console.log(`[${new Date().toLocaleString()}] Checking Route...`);
   console.log(`Headless Mode     : ${isHeadless}`);
   console.log(`Bus Operator      : ${targetOperator}`);
-  console.log(`Departure Time    : ${activeRoute.departureTime || '20:30'}`);
-  console.log(`Seat Position     : Upper Deck 2nd Seat (Seat ${config.targetSeatNumber || 'U2'})`);
-  console.log(`Pickup Location   : ${activeRoute.boardingPointSearch}`);
-  console.log(`Drop Location     : ${activeRoute.droppingPointSearch}`);
-  console.log(`Target URL        : ${activeRoute.targetUrl}`);
+  console.log(`Departure Time    : ${departureTime}`);
+  console.log(`Seat Position     : Upper Deck 1st Seat (Seat ${config.targetSeatNumber || 'U1'})`);
+  console.log(`Pickup Location   : ${boardingPointSearch}`);
+  console.log(`Drop Location     : ${droppingPointSearch}`);
+  console.log(`Target URL        : ${targetUrl}`);
   console.log(`==================================================`);
 
   const browser = await chromium.launch({
@@ -216,20 +87,6 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
   });
 
-  let dynamicRouteId = '';
-  let dynamicOperatorId = '';
-
-  page.on('response', async (response) => {
-    const url = response.url();
-    if (url.includes('/rpw/api/connectingSeatLayout') || url.includes('/rpw/api/seatlayout')) {
-      try {
-        const json = await response.json();
-        if (json.RouteId) dynamicRouteId = json.RouteId.toString();
-        if (json.operatorId) dynamicOperatorId = json.operatorId.toString();
-      } catch (e) {}
-    }
-  });
-
   let runResult = {
     success: false,
     seatAvailable: false,
@@ -238,37 +95,27 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     selectedSeat: null,
     selectedBp: null,
     selectedDp: null,
-    selectedBpId: null,
-    selectedDpId: null,
     screenshot: null,
     error: null
   };
 
   try {
-    // 1. Navigate to target URL
-    console.log(`Navigating to route: ${activeRoute.targetUrl}`);
-    await page.goto(activeRoute.targetUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+    console.log(`Navigating to route: ${targetUrl}`);
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
 
-    // Wait for search result cards list to be present in DOM
     console.log('Waiting for search results page to load...');
     await page.waitForSelector('li[class*="srpListItem"], div[class*="tuple"]', { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(2000);
 
-    // 2. Open Seat View for Target Bus Operator (Easy Go)
-    console.log(`Locating bus card for operator matching "${targetOperator}" (Departure: ${activeRoute.departureTime})...`);
+    console.log(`Locating bus card for operator matching "${targetOperator}" or Departure Time: ${departureTime}...`);
     
-    // Debug: take a screenshot of the initial loaded page
     await page.screenshot({ path: path.join(screenshotDir, `initial_load_${timestamp}.png`), fullPage: true }).catch(() => {});
 
     const busCard = await (async () => {
-      const searchPattern = activeRoute.departureTime 
-        ? new RegExp(`Easy\\s*Go|${activeRoute.departureTime}`, 'i')
-        : new RegExp(targetOperator, 'i');
-
+      const searchPattern = new RegExp(`${targetOperator}|${departureTime}`, 'i');
       const getCardLocator = () => page.locator('li[class*="tupleWrapper"], li[class*="srpListItem"], li[class*="card"], div[class*="busCard"], div[class*="tuple"]').filter({ hasText: searchPattern }).first();
 
-      // Strategy 1: Progressive Page Scroll & Scan
-      console.log(`Strategy 1: Progressive page scroll to scan for "${targetOperator}"...`);
+      console.log(`Strategy 1: Progressive page scroll to scan for "${targetOperator}" or "${departureTime}"...`);
       for (let i = 0; i < 8; i++) {
         await page.evaluate(() => window.scrollBy(0, 1000));
         await page.waitForTimeout(400);
@@ -280,7 +127,6 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         }
       }
 
-      // Strategy 2: Departure Time Sorting (Brings evening/night buses like 20:30 / 23:59 to top)
       console.log(`Strategy 2: Clicking "Departure time" sort tab...`);
       const depSortBtn = page.locator('text=/Departure time/i').first();
       if (await depSortBtn.count() > 0) {
@@ -298,7 +144,6 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         }
       }
 
-      // Strategy 3: Deep Page Scroll
       console.log(`Strategy 3: Performing deep scroll across all loaded results...`);
       for (let i = 0; i < 15; i++) {
         await page.evaluate(() => window.scrollBy(0, 1500));
@@ -315,38 +160,32 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     })();
 
     if (await busCard.count() === 0) {
-      throw new Error(`Bus card container for operator "${targetOperator}" was not found on search page`);
+      throw new Error(`Bus card container for "${targetOperator}" or departure "${departureTime}" was not found on search page`);
     }
 
-    const cardSummaryText = await busCard.innerText().catch(() => '');
-    console.log(`Matched Bus Card Summary: ${cardSummaryText.slice(0, 100).replace(/\s+/g, ' ')}`);
-
     const viewBtn = busCard.locator('text=/View seats/i').first();
-    console.log(`Clicking "View Seats" on ${targetOperator} bus...`);
+    console.log(`Clicking "View Seats" on matched bus...`);
     await viewBtn.click();
     await randomJitter(2500, 4500);
 
-    // 3. Scan Seats Layout for Target Seat (default: Seat U2)
-    const targetSeatNumber = config.targetSeatNumber || 'U2';
+    const targetSeatNumber = config.targetSeatNumber || 'U1';
     console.log(`Scanning seats layout for Target Seat "${targetSeatNumber}"...`);
 
     const seatMatch = await page.evaluate((seatNo) => {
       const allSeatSpans = Array.from(document.querySelectorAll('span[aria-label]'));
       
-      // 1. Match by exact element ID or aria-label containing "Seat number L3"
       let found = allSeatSpans.find(s => {
         const id = (s.id || '').toUpperCase();
         const aria = (s.getAttribute('aria-label') || '').toUpperCase();
         return id === seatNo.toUpperCase() || aria.includes(`SEAT NUMBER ${seatNo.toUpperCase()}`);
       });
 
-      // 2. Fallback to Upper Deck 2nd seat if U2 specified and exact ID not present
-      if (!found && seatNo.toUpperCase() === 'U2') {
+      if (!found && seatNo.toUpperCase() === 'U1') {
         const deckSections = Array.from(document.querySelectorAll('div[class*="deckSection"]'));
         const upperSec = deckSections.find(s => (s.innerText || '').includes('Upper deck'));
         if (upperSec) {
           const upperSpans = Array.from(upperSec.querySelectorAll('span[aria-label]'));
-          found = upperSpans[1] || upperSpans[0];
+          found = upperSpans[0];
         }
       }
 
@@ -368,8 +207,6 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
 
     if (!seatMatch.isAvailable) {
       console.log(`\n[SEAT UNAVAILABLE] Target Seat (${seatMatch.seatId}) is currently SOLD/BOOKED.`);
-      console.log(`Script will retry checking seat availability in ${config.retryIntervalSeconds || 20} seconds...`);
-      
       const unavailableScreenshot = path.join(screenshotDir, `unavailable_${timestamp}.png`);
       await page.screenshot({ path: unavailableScreenshot, fullPage: false }).catch(() => {});
       
@@ -379,8 +216,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
       return runResult;
     }
 
-    // --- SEAT IS AVAILABLE ---
-    console.log(`\n[SEAT AVAILABLE!] Seat ${seatMatch.seatId} on ${targetOperator} is AVAILABLE for booking!`);
+    console.log(`\n[SEAT AVAILABLE!] Seat ${seatMatch.seatId} is AVAILABLE for booking!`);
     console.log(`Selecting seat: ${seatMatch.ariaLabel}...`);
     
     const seatElem = page.locator(`span#${seatMatch.seatId}, span[aria-label*="Seat number ${seatMatch.seatId}" i]`).first();
@@ -391,7 +227,6 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     runResult.selectedSeat = seatMatch.seatId;
     runResult.seatAvailable = true;
 
-    // 4. Click Select Boarding & Dropping Points button
     console.log('Proceeding to Boarding & Dropping point selection...');
     const selectBpDpBtn = page.locator('button[aria-label*="Select boarding" i], button[class*="primaryButton"]:has-text("Select boarding"), button:has-text("Select boarding & dropping points")').first();
     if (await selectBpDpBtn.isVisible().catch(() => false)) {
@@ -400,9 +235,7 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
     }
     await page.waitForTimeout(3000);
 
-    // 5. Select Boarding Point
-    const bpSearch = activeRoute.boardingPointSearch;
-    console.log(`Selecting Boarding Point matching "${bpSearch}"...`);
+    console.log(`Selecting Boarding Point matching "${boardingPointSearch}"...`);
     const bpDetails = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="bp_"]'));
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
@@ -416,24 +249,16 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
         label.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
-        const bpText = parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
-        const rawVal = match.getAttribute('value') || match.getAttribute('data-id') || match.getAttribute('val') || '';
-        const numericVal = rawVal.replace(/\D/g, '');
-        const parentVal = parent ? (parent.getAttribute('data-id') || parent.id || '').replace(/\D/g, '') : '';
-        const bpId = (numericVal && numericVal.length > 3) ? numericVal : (parentVal.length > 3 ? parentVal : "28319487");
-        return { bpText, bpId };
+        return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
       }
-      return { bpText: null, bpId: '28319487' };
-    }, bpSearch);
+      return null;
+    }, boardingPointSearch);
 
-    console.log(`Selected BP: ${bpDetails.bpText} (ID: ${bpDetails.bpId})`);
-    runResult.selectedBp = bpDetails.bpText;
-    runResult.selectedBpId = bpDetails.bpId;
+    console.log(`Selected BP: ${bpDetails}`);
+    runResult.selectedBp = bpDetails;
     await page.waitForTimeout(2000);
 
-    // 6. Select Dropping Point
-    const dpSearch = activeRoute.droppingPointSearch;
-    console.log(`Selecting Dropping Point matching "${dpSearch}"...`);
+    console.log(`Selecting Dropping Point matching "${droppingPointSearch}"...`);
     const dpDetails = await page.evaluate((searchTerm) => {
       const inputs = Array.from(document.querySelectorAll('input[name^="dp_"]'));
       const cleanSearch = searchTerm.toLowerCase().replace(/\s+/g, '');
@@ -447,139 +272,76 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
         const label = document.querySelector(`label[for="${match.id}"]`) || match.parentElement || match;
         label.click();
         const parent = match.closest('li') || match.closest('label') || match.parentElement;
-        const dpText = parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
-        const rawVal = match.getAttribute('value') || match.getAttribute('data-id') || match.getAttribute('val') || '';
-        const numericVal = rawVal.replace(/\D/g, '');
-        const parentVal = parent ? (parent.getAttribute('data-id') || parent.id || '').replace(/\D/g, '') : '';
-        const dpId = (numericVal && numericVal.length > 3) ? numericVal : (parentVal.length > 3 ? parentVal : "28320383");
-        return { dpText, dpId };
+        return parent ? parent.innerText.trim().replace(/\s+/g, ' ') : match.id;
       }
-      return { bpText: null, dpId: '28320383' };
-    }, dpSearch);
+      return null;
+    }, droppingPointSearch);
 
-    console.log(`Selected DP: ${dpDetails.dpText} (ID: ${dpDetails.dpId})`);
-    runResult.selectedDp = dpDetails.dpText;
-    runResult.selectedDpId = dpDetails.dpId;
+    console.log(`Selected DP: ${dpDetails}`);
+    runResult.selectedDp = dpDetails;
     await page.waitForTimeout(2500);
 
-    // 7. Click Proceed / Transition to Passenger Details Form
     console.log('Transitioning to Passenger Info view...');
     const proceedToPassengerBtn = page.locator('button[class*="primaryButton"]:has-text("Continue booking"), button[class*="primaryButton"]:has-text("Proceed"), button[class*="primaryButton"]:has-text("Fill Passenger"), button:has-text("Fill Passenger Details"), button:has-text("Proceed")').first();
     if (await proceedToPassengerBtn.isVisible().catch(() => false)) {
-      console.log('Clicking primary CTA button with text:', await proceedToPassengerBtn.innerText().catch(() => ''));
       await proceedToPassengerBtn.click({ force: true });
       await page.waitForTimeout(4000);
     } else {
-      console.log('Clicking Passenger Info tab header directly...');
       await page.locator('text=/Passenger Info/i').first().click({ force: true }).catch(() => {});
       await page.waitForTimeout(4000);
     }
 
-    // 8. Fill Passenger Details Form
     const p = config.passenger || {};
-    console.log(`Filling Passenger Details: Name: "${p.name}", Age: ${p.age}, Gender: ${p.gender}, Email: ${p.email}, Mobile: ${p.phone}`);
-
-    // Fill Phone / Mobile field
     const phoneInput = page.locator('input[name="Phone"], input[type="tel"], input[placeholder*="phone" i], input[id="0_6"]').first();
-    if (await phoneInput.isVisible().catch(() => false)) {
-      await phoneInput.fill(p.phone || '9876543210');
-      console.log('Filled Mobile Phone:', p.phone || '9876543210');
-    }
+    if (await phoneInput.isVisible().catch(() => false)) await phoneInput.fill(p.phone || '9876543210');
 
-    // Fill Email field
     const emailInput = page.locator('input[placeholder*="Enter email id" i], input[id="0_5"], input[type="email"]').first();
-    if (await emailInput.isVisible().catch(() => false)) {
-      await emailInput.fill(p.email || 'johndoe@example.com');
-      console.log('Filled Email:', p.email || 'johndoe@example.com');
-    }
+    if (await emailInput.isVisible().catch(() => false)) await emailInput.fill(p.email || 'johndoe@example.com');
 
-    // Fill Passenger Name field
     const nameInput = page.locator('input[placeholder*="Enter your Name" i], input[id="0_4"], input[name*="name" i]').first();
-    if (await nameInput.isVisible().catch(() => false)) {
-      await nameInput.fill(p.name || 'John Doe');
-      console.log('Filled Passenger Name:', p.name || 'John Doe');
-    }
+    if (await nameInput.isVisible().catch(() => false)) await nameInput.fill(p.name || 'John Doe');
 
-    // Fill Passenger Age field
     const ageInput = page.locator('input[placeholder*="Enter Age" i], input[id="0_1"], input[type="number"]').first();
-    if (await ageInput.isVisible().catch(() => false)) {
-      await ageInput.fill((p.age || '28').toString());
-      console.log('Filled Passenger Age:', p.age || '28');
-    }
+    if (await ageInput.isVisible().catch(() => false)) await ageInput.fill((p.age || '28').toString());
 
-    // Select Gender (Male / Female)
-    console.log('Selecting Gender (Male)...');
-    const maleSelected = await page.evaluate(() => {
-      // 1. Find exact radio input for Male
+    await page.evaluate(() => {
       const radioInput = document.querySelector('input[value="Male"], input[id$="_22"], input[name*="gender" i][value="Male"]');
       if (radioInput) {
         radioInput.checked = true;
         radioInput.dispatchEvent(new Event('change', { bubbles: true }));
-        radioInput.dispatchEvent(new Event('click', { bubbles: true }));
-        const label = document.querySelector(`label[for="${radioInput.id}"]`) || radioInput.closest('label') || radioInput.parentElement;
+        const label = document.querySelector(`label[for="${radioInput.id}"]`) || radioInput.closest('label');
         if (label) label.click();
-        return true;
+      } else {
+        const elems = Array.from(document.querySelectorAll('label, div[class*="pill"]'));
+        const maleElem = elems.find(e => e.innerText && e.innerText.trim() === 'Male');
+        if (maleElem) maleElem.click();
       }
-
-      // 2. Look for exact text pill "Male"
-      const elems = Array.from(document.querySelectorAll('label, div[class*="pill"], div[class*="radio"], span[class*="radio"], button, div'));
-      const maleElem = elems.find(e => e.innerText && e.innerText.trim() === 'Male' && e.children.length <= 1);
-      if (maleElem) {
-        maleElem.click();
-        const inputInside = maleElem.querySelector('input') || maleElem.parentElement.querySelector('input');
-        if (inputInside) {
-          inputInside.checked = true;
-          inputInside.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        return true;
-      }
-      return false;
     });
-
-    if (!maleSelected) {
-      const maleLoc = page.locator('input[value="Male"], label[for*="22"], label:has-text("Male")').first();
-      if (await maleLoc.isVisible().catch(() => false)) {
-        await maleLoc.click({ force: true }).catch(() => {});
-      }
-    }
-    console.log('Selected Gender: Male');
 
     await page.waitForTimeout(1000);
 
-    // Handle State of Residence modal/dropdown if open or required (#STATE_LIST)
-    console.log('Checking State of Residence selection...');
     await page.evaluate(() => {
       const stateItem = Array.from(document.querySelectorAll('li, div[class*="state"], span')).find(e => e.innerText && /Telangana|Andhra Pradesh|Karnataka/i.test(e.innerText.trim()));
       if (stateItem) stateItem.click();
     });
     
-    // We used to press Escape here, but that closes the entire passenger details modal/drawer on Redbus!
-    // Simply clicking the state or ignoring it is enough.
     await page.waitForTimeout(1000);
 
-    // 9. Select "Don't add Travel Insurance"
-    console.log('Selecting "Don\'t add Travel Insurance"...');
     await page.evaluate(() => {
       const radio = document.getElementById('insuranceRejectBtn');
       if (radio) {
         const parentLabel = radio.closest('label') || radio.parentElement;
         if (parentLabel) parentLabel.click();
-        radio.checked = true;
-        radio.dispatchEvent(new Event('change', { bubbles: true }));
-        radio.dispatchEvent(new Event('click', { bubbles: true }));
       } else {
         const elements = Array.from(document.querySelectorAll('label, div, span'));
         const target = elements.find(el => el.innerText && /Don’t add Travel Insurance|Don't add Travel Insurance|No, I don't want/i.test(el.innerText.trim()));
         if (target) target.click();
       }
     });
+    
     await page.waitForTimeout(1000);
-
-    // 10. 5-Second Pause before hitting Continue Booking (Requested by User)
-    console.log('Waiting 5 seconds before clicking "Continue booking" button...');
     await page.waitForTimeout(5000);
 
-    // 11. Click "Continue booking" / "Proceed to pay" button
     console.log('Clicking "Continue booking" button...');
     const clicked = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button, input[type="submit"], div[class*="button"]'));
@@ -596,43 +358,31 @@ async function runRedbusAutomation(config, overrideHeadless = undefined, forcedP
       await continueBookingBtn.click({ force: true }).catch(() => {});
     }
 
-    // Wait for URL to transition to paymentDetails
-    console.log('Waiting for navigation to https://www.redbus.in/paymentDetails...');
     await page.waitForURL(url => url.href.includes('paymentDetails') || url.href.includes('checkout') || url.href.includes('payment'), { timeout: 15000 }).catch(() => {});
 
-    // 13. Save Checkout Screenshot
     const screenshotPath = path.join(screenshotDir, `checkout_${timestamp}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: false });
-    console.log(`Saved checkout screenshot: ${screenshotPath}`);
 
     runResult.success = true;
     runResult.screenshot = screenshotPath;
     console.log(`\n==================================================`);
-    console.log(`[SUCCESS] Passenger Info filled & reached Payment page (${page.url()})!`);
+    console.log(`[SUCCESS] Reached Payment page!`);
     console.log(`==================================================`);
 
-    // 12. Keep browser open for manual payment if not headless
     if (!isHeadless) {
-      console.log('Leaving browser open indefinitely for manual payment. Please complete your transaction.');
-      await new Promise(() => {}); // Hang indefinitely
+      await new Promise(() => {}); 
     } else {
-      const keepOpenMs = (config.keepBrowserOpenSeconds || 15) * 1000;
-      console.log(`Keeping headless browser open for ${keepOpenMs / 1000} seconds before closing...`);
-      await page.waitForTimeout(keepOpenMs);
-      console.log('Wait complete.');
+      await page.waitForTimeout((config.keepBrowserOpenSeconds || 15) * 1000);
     }
 
   } catch (err) {
     console.error(`\n[ERROR] Automation run failed: ${err.message}`);
     runResult.error = err.message;
-    runResult.retryNeeded = true; // Retry on generic errors (like page load failures or bot blocks)
+    runResult.retryNeeded = true; 
     const errorScreenshot = path.join(screenshotDir, `error_${timestamp}.png`);
     try {
       await page.screenshot({ path: errorScreenshot, fullPage: true });
-      console.log(`Saved error screenshot: ${errorScreenshot}`);
-    } catch (ssErr) {
-      console.log(`Failed to save error screenshot: ${ssErr.message}`);
-    }
+    } catch (ssErr) {}
     runResult.screenshot = errorScreenshot;
   } finally {
     await browser.close();
